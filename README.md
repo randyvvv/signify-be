@@ -35,6 +35,16 @@ pnpm db:studio     # open Drizzle Studio
 pnpm dev     # http://localhost:8787
 ```
 
+## API docs (Swagger)
+
+Once the server is running:
+- **Swagger UI:** http://localhost:8787/docs
+- **Raw OpenAPI spec:** http://localhost:8787/openapi.json
+
+To call protected endpoints from Swagger UI, click **Authorize** and paste the JWT
+returned by `/api/auth/login` (no need to type the `Bearer ` prefix). The spec is
+hand-maintained in `src/openapi.ts` — keep it in sync when you change routes.
+
 ## Endpoints
 
 Everything lives under `/api`. All routes except `/auth/*` require the header `Authorization: Bearer <token>`.

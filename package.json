@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@hono/node-server": "^1.13.7",
+    "@hono/swagger-ui": "^0.6.1",
     "@hono/zod-validator": "^0.4.2",
     "bcryptjs": "^2.4.3",
     "dotenv": "^16.4.7",
