@@ -3,7 +3,7 @@ import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { eq, sql } from "drizzle-orm";
 import { db } from "../db/index.js";
-import { users, userPreferences } from "../db/schema.js";
+import { users, userPreferences, shopItems, userItems } from "../db/schema.js";
 import { hashPassword, verifyPassword } from "../lib/auth.js";
 import { publicUser } from "../lib/user.js";
 import { badRequest, notFound, unauthorized } from "../lib/errors.js";
@@ -125,6 +125,32 @@ profile.post("/password", zValidator("json", passwordSchema), async (c) => {
     .where(eq(users.id, userId));
 
   return c.json({ ok: true });
+});
+
+// GET /me/items  -> item yang dimiliki user (+ item default) & map yang dipakai
+profile.get("/items", async (c) => {
+  const userId = c.get("userId");
+
+  const owned = await db
+    .select({ item: shopItems, equipped: userItems.equipped })
+    .from(userItems)
+    .innerJoin(shopItems, eq(shopItems.id, userItems.itemId))
+    .where(eq(userItems.userId, userId));
+  const defaults = await db
+    .select()
+    .from(shopItems)
+    .where(eq(shopItems.isDefault, true));
+
+  // Gabung: item default selalu dianggap dimiliki; baris userItems menimpa status equipped.
+  const byId = new Map<string, typeof shopItems.$inferSelect & { equipped: boolean }>();
+  for (const d of defaults) byId.set(d.id, { ...d, equipped: false });
+  for (const o of owned) byId.set(o.item.id, { ...o.item, equipped: o.equipped });
+
+  const items = [...byId.values()];
+  const equipped: Record<string, string> = {};
+  for (const it of items) if (it.equipped) equipped[it.category] = it.id;
+
+  return c.json({ items, equipped });
 });
 
 export default profile;
