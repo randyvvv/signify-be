@@ -2,7 +2,9 @@ import { Hono } from "hono";
 import { serve } from "@hono/node-server";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
+import { swaggerUI } from "@hono/swagger-ui";
 import { env } from "./lib/env.js";
+import { openApiDocument } from "./openapi.js";
 
 import auth from "./routes/auth.js";
 import profile from "./routes/profile.js";
@@ -25,8 +27,12 @@ app.use(
   }),
 );
 
-app.get("/", (c) => c.json({ name: "signify-api", status: "ok" }));
+app.get("/", (c) => c.json({ name: "signify-api", status: "ok", docs: "/docs" }));
 app.get("/health", (c) => c.json({ status: "ok" }));
+
+// API docs: raw OpenAPI spec + Swagger UI
+app.get("/openapi.json", (c) => c.json(openApiDocument));
+app.get("/docs", swaggerUI({ url: "/openapi.json" }));
 
 const api = new Hono();
 api.route("/auth", auth);

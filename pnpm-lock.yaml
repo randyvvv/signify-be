@@ -11,6 +11,9 @@ importers:
       '@hono/node-server':
         specifier: ^1.13.7
         version: 1.19.14(hono@4.12.23)
+      '@hono/swagger-ui':
+        specifier: ^0.6.1
+        version: 0.6.1(hono@4.12.23)
       '@hono/zod-validator':
         specifier: ^0.4.2
         version: 0.4.3(hono@4.12.23)(zod@3.25.76)
@@ -494,6 +497,11 @@ packages:
     peerDependencies:
       hono: ^4
 
+  '@hono/swagger-ui@0.6.1':
+    resolution: {integrity: sha512-sJTvldu1GPeEPfyeLG7gRj+W4vEuD+JDi+JjJ3TJs/DvMUtBLs0KJO5yokGegWWdy5qrbdnQGekbhgNRmPmYKQ==}
+    peerDependencies:
+      hono: '>=4.0.0'
+
   '@hono/zod-validator@0.4.3':
     resolution: {integrity: sha512-xIgMYXDyJ4Hj6ekm9T9Y27s080Nl9NXHcJkOvkXPhubOLj8hZkOL8pDnnXfvCf5xEE8Q4oMFenQUZZREUY2gqQ==}
     peerDependencies:
@@ -944,6 +952,10 @@ snapshots:
     optional: true
 
   '@hono/node-server@1.19.14(hono@4.12.23)':
+    dependencies:
+      hono: 4.12.23
+
+  '@hono/swagger-ui@0.6.1(hono@4.12.23)':
     dependencies:
       hono: 4.12.23
 
