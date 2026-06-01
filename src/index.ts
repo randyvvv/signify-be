@@ -5,6 +5,7 @@ import { logger } from "hono/logger";
 import { swaggerUI } from "@hono/swagger-ui";
 import { env } from "./lib/env.js";
 import { openApiDocument } from "./openapi.js";
+import { AppError } from "./lib/errors.js";
 
 import auth from "./routes/auth.js";
 import profile from "./routes/profile.js";
@@ -49,6 +50,9 @@ app.route("/api", api);
 // 404 & error handler
 app.notFound((c) => c.json({ error: "Not found" }, 404));
 app.onError((err, c) => {
+  if (err instanceof AppError) {
+    return c.json({ error: err.message, code: err.code }, err.status);
+  }
   console.error(err);
   return c.json({ error: "Internal server error" }, 500);
 });
