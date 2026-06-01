@@ -104,7 +104,16 @@ Everything lives under `/api`. All routes except `/auth/*` require the header `A
 ### Leaderboard
 | Method | Path | Description |
 |---|---|---|
-| GET | `/api/leaderboard?limit=` | ranking by coins |
+| GET | `/api/leaderboard?limit=` | ranking by coins (`{ entries, me }`) |
+
+### AI (stubs — model not ready)
+Gated by `AI_ENABLED` (default `false`).
+| Method | Path | Description |
+|---|---|---|
+| POST | `/api/chat` | Signify chatbot. `503 ai_unavailable` when disabled, else a placeholder reply |
+| POST | `/api/translator/sessions` | register a livestream URL; created with `status: "pending"` |
+| GET | `/api/translator/sessions` | list the user's sessions |
+| GET | `/api/translator/sessions/:id` | session detail |
 
 ## Notes
 - Hand detection (MediaPipe) still runs on the **client** (the FE). The backend only stores results/progress.
