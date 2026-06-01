@@ -77,13 +77,15 @@ async function main() {
   ok("GET /dashboard 200 + stats", dash.status === 200 && !!dash.json?.stats, dash);
 
   // 6. quiz attempt (kalau ada quiz hasil seed)
+  let quizId: string | null = null;
+  let answers: { questionId: string; selectedIndex: number }[] = [];
   const quizzes = await api("GET", "/api/quizzes");
   if (Array.isArray(quizzes.json) && quizzes.json.length > 0) {
-    const quizId = quizzes.json[0].id;
+    quizId = quizzes.json[0].id;
     const detail = await api("GET", `/api/quizzes/${quizId}`);
     ok("GET /quizzes/:id 200 + questions", detail.status === 200 && Array.isArray(detail.json?.questions), detail);
 
-    const answers = (detail.json.questions ?? []).map((q: any) => ({
+    answers = (detail.json.questions ?? []).map((q: any) => ({
       questionId: q.id,
       selectedIndex: 0,
     }));
@@ -100,13 +102,27 @@ async function main() {
     console.log("… tidak ada quiz (seed?), lewati langkah quiz");
   }
 
-  // 7. purchase (item termurah berbayar yang belum dimiliki)
+  // 7. purchase: item termurah berbayar yang belum dimiliki.
+  // User baru mulai dari 0 coins, jadi kumpulkan dulu dengan mengulang quiz
+  // sampai saldo cukup (deterministik untuk data seed).
   const items = await api("GET", "/api/shop/items");
-  if (Array.isArray(items.json)) {
-    const buyable = items.json
-      .filter((i: any) => !i.isOwned && i.price > 0)
-      .sort((a: any, b: any) => a.price - b.price)[0];
-    if (buyable) {
+  const buyable = Array.isArray(items.json)
+    ? items.json
+        .filter((i: any) => !i.isOwned && i.price > 0)
+        .sort((a: any, b: any) => a.price - b.price)[0]
+    : undefined;
+
+  if (buyable) {
+    const coins = async () => (await api("GET", "/api/me")).json?.coins ?? 0;
+    let balance = await coins();
+    let guard = 0;
+    while (balance < buyable.price && quizId && answers.length && guard < 10) {
+      await api("POST", `/api/quizzes/${quizId}/attempts`, { answers, timeTakenSeconds: 1 });
+      balance = await coins();
+      guard++;
+    }
+
+    if (balance >= buyable.price) {
       const buy = await api("POST", `/api/shop/items/${buyable.id}/purchase`);
       ok(
         "POST /shop/items/:id/purchase 201 + balance",
@@ -114,8 +130,12 @@ async function main() {
         buy,
       );
     } else {
-      console.log("… tidak ada item berbayar untuk dibeli, lewati langkah purchase");
+      console.log(
+        `… saldo ${balance} < harga termurah ${buyable.price} (${buyable.name}), lewati purchase`,
+      );
     }
+  } else {
+    console.log("… tidak ada item berbayar untuk dibeli, lewati langkah purchase");
   }
 
   console.log(`\n✅ Smoke selesai — ${passed} langkah lolos.`);
