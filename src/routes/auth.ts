@@ -5,6 +5,8 @@ import { eq } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { users, userPreferences } from "../db/schema.js";
 import { hashPassword, verifyPassword, createToken } from "../lib/auth.js";
+import { publicUser, normalizeEmail } from "../lib/user.js";
+import { conflict, unauthorized } from "../lib/errors.js";
 import { requireAuth, type AuthVariables } from "../middleware/auth.js";
 
 const registerSchema = z.object({
@@ -21,13 +23,14 @@ const loginSchema = z.object({
 const auth = new Hono<{ Variables: AuthVariables }>();
 
 auth.post("/register", zValidator("json", registerSchema), async (c) => {
-  const { email, password, fullName } = c.req.valid("json");
+  const { password, fullName } = c.req.valid("json");
+  const email = normalizeEmail(c.req.valid("json").email);
 
   const existing = await db.query.users.findFirst({
     where: eq(users.email, email),
   });
   if (existing) {
-    return c.json({ error: "Email sudah terdaftar" }, 409);
+    throw conflict("Email sudah terdaftar", "email_taken");
   }
 
   const passwordHash = await hashPassword(password);
@@ -40,28 +43,20 @@ auth.post("/register", zValidator("json", registerSchema), async (c) => {
   await db.insert(userPreferences).values({ userId: user!.id });
 
   const token = await createToken(user!.id, user!.email);
-  return c.json(
-    {
-      token,
-      user: { id: user!.id, email: user!.email, fullName: user!.fullName },
-    },
-    201,
-  );
+  return c.json({ token, user: publicUser(user!) }, 201);
 });
 
 auth.post("/login", zValidator("json", loginSchema), async (c) => {
-  const { email, password } = c.req.valid("json");
+  const { password } = c.req.valid("json");
+  const email = normalizeEmail(c.req.valid("json").email);
 
   const user = await db.query.users.findFirst({ where: eq(users.email, email) });
   if (!user || !(await verifyPassword(password, user.passwordHash))) {
-    return c.json({ error: "Email atau password salah" }, 401);
+    throw unauthorized("Email atau password salah", "invalid_credentials");
   }
 
   const token = await createToken(user.id, user.email);
-  return c.json({
-    token,
-    user: { id: user.id, email: user.email, fullName: user.fullName },
-  });
+  return c.json({ token, user: publicUser(user) });
 });
 
 // Cek token cepat & dapatkan identitas dasar.

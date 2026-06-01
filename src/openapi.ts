@@ -42,14 +42,7 @@ export const openApiDocument = {
         type: "object",
         properties: {
           token: { type: "string" },
-          user: {
-            type: "object",
-            properties: {
-              id: { type: "string", format: "uuid" },
-              email: { type: "string", format: "email" },
-              fullName: { type: "string", nullable: true },
-            },
-          },
+          user: { $ref: "#/components/schemas/User" },
         },
       },
       User: {
@@ -498,6 +491,47 @@ export const openApiDocument = {
             },
           },
           "401": { $ref: "#/components/responses/Unauthorized" },
+        },
+      },
+    },
+    "/api/me/password": {
+      post: {
+        tags: ["Profile"],
+        summary: "Change password",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["currentPassword", "newPassword"],
+                properties: {
+                  currentPassword: { type: "string" },
+                  newPassword: { type: "string", minLength: 6 },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "OK",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: { ok: { type: "boolean" } },
+                },
+              },
+            },
+          },
+          "400": { description: "New password must differ" },
+          "401": {
+            description: "Wrong current password / unauthorized",
+            content: {
+              "application/json": { schema: { $ref: "#/components/schemas/Error" } },
+            },
+          },
         },
       },
     },
