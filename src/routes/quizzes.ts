@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
-import { and, eq, ilike, sql, desc, inArray } from "drizzle-orm";
+import { and, eq, ilike, sql, desc } from "drizzle-orm";
 import { db } from "../db/index.js";
 import {
   quizzes,
@@ -9,9 +9,10 @@ import {
   quizAttempts,
   quizAttemptAnswers,
   quizLikes,
-  users,
-  activities,
 } from "../db/schema.js";
+import { badRequest, notFound } from "../lib/errors.js";
+import { addCoins } from "../services/coins.js";
+import { recordActivity } from "../services/activity.js";
 import { requireAuth, type AuthVariables } from "../middleware/auth.js";
 
 const route = new Hono<{ Variables: AuthVariables }>();
@@ -20,8 +21,8 @@ route.use("*", requireAuth);
 // GET /quizzes?search=&category=&level=
 route.get("/", async (c) => {
   const search = c.req.query("search")?.trim();
-  const category = c.req.query("category");
-  const level = c.req.query("level");
+  const category = c.req.query("category")?.trim();
+  const level = c.req.query("level")?.trim();
 
   const conditions = [];
   if (search) conditions.push(ilike(quizzes.title, `%${search}%`));
@@ -50,7 +51,7 @@ route.get("/popular", async (c) => {
 route.get("/:id", async (c) => {
   const id = c.req.param("id");
   const quiz = await db.query.quizzes.findFirst({ where: eq(quizzes.id, id) });
-  if (!quiz) return c.json({ error: "Quiz tidak ditemukan" }, 404);
+  if (!quiz) throw notFound("Quiz tidak ditemukan");
 
   const questions = await db
     .select()
@@ -75,74 +76,89 @@ const submitSchema = z.object({
   timeTakenSeconds: z.number().int().min(0).default(0),
 });
 
-// POST /quizzes/:id/attempts  -> nilai, accuracy, +coins
+// POST /quizzes/:id/attempts  -> grade, accuracy, +coins (transaksional)
 route.post("/:id/attempts", zValidator("json", submitSchema), async (c) => {
   const userId = c.get("userId");
   const id = c.req.param("id");
   const { answers, timeTakenSeconds } = c.req.valid("json");
 
   const quiz = await db.query.quizzes.findFirst({ where: eq(quizzes.id, id) });
-  if (!quiz) return c.json({ error: "Quiz tidak ditemukan" }, 404);
+  if (!quiz) throw notFound("Quiz tidak ditemukan");
 
   const questions = await db
     .select()
     .from(quizQuestions)
     .where(eq(quizQuestions.quizId, id));
-  const keyById = new Map(questions.map((q) => [q.id, q.correctIndex]));
+  const qById = new Map(questions.map((q) => [q.id, q]));
 
+  // Tolak jawaban yang questionId-nya bukan milik quiz ini.
+  const foreign = answers.find((a) => !qById.has(a.questionId));
+  if (foreign) {
+    throw badRequest(
+      `Question ${foreign.questionId} bukan bagian dari quiz ini`,
+      "invalid_question",
+    );
+  }
+
+  // Grading + payload review (lengkap dengan jawaban benar untuk halaman hasil FE).
   let correctCount = 0;
   const graded = answers.map((a) => {
-    const isCorrect = keyById.get(a.questionId) === a.selectedIndex;
+    const q = qById.get(a.questionId)!;
+    const isCorrect = q.correctIndex === a.selectedIndex;
     if (isCorrect) correctCount++;
-    return { ...a, isCorrect };
+    return {
+      questionId: a.questionId,
+      question: q.question,
+      type: q.type,
+      term: q.term,
+      selectedIndex: a.selectedIndex,
+      correctIndex: q.correctIndex,
+      isCorrect,
+    };
   });
 
   const totalCount = questions.length;
   const accuracy = totalCount > 0 ? Math.round((correctCount / totalCount) * 100) : 0;
-  // Coins proporsional terhadap akurasi.
   const pointsEarned = Math.round((accuracy / 100) * quiz.rewardCoins);
 
-  const [attempt] = await db
-    .insert(quizAttempts)
-    .values({
-      userId,
-      quizId: id,
-      correctCount,
-      totalCount,
-      accuracy,
-      pointsEarned,
-      timeTakenSeconds,
-    })
-    .returning();
+  // Simpan attempt + jawaban, beri coins, dan catat aktivitas (+streak) — satu transaksi.
+  const attempt = await db.transaction(async (tx) => {
+    const [created] = await tx
+      .insert(quizAttempts)
+      .values({
+        userId,
+        quizId: id,
+        correctCount,
+        totalCount,
+        accuracy,
+        pointsEarned,
+        timeTakenSeconds,
+      })
+      .returning();
 
-  if (graded.length) {
-    await db.insert(quizAttemptAnswers).values(
-      graded.map((g) => ({
-        attemptId: attempt!.id,
-        questionId: g.questionId,
-        selectedIndex: g.selectedIndex,
-        isCorrect: g.isCorrect,
-      })),
-    );
-  }
+    if (graded.length) {
+      await tx.insert(quizAttemptAnswers).values(
+        graded.map((g) => ({
+          attemptId: created!.id,
+          questionId: g.questionId,
+          selectedIndex: g.selectedIndex,
+          isCorrect: g.isCorrect,
+        })),
+      );
+    }
 
-  // Tambah coins + catat aktivitas.
-  await db
-    .update(users)
-    .set({ coins: sql`${users.coins} + ${pointsEarned}` })
-    .where(eq(users.id, userId));
-  await db.insert(activities).values({
-    userId,
-    type: "quiz",
-    referenceId: id,
-    title: quiz.title,
-    durationSeconds: timeTakenSeconds,
+    await addCoins(tx, userId, pointsEarned);
+    await recordActivity(tx, userId, {
+      type: "quiz",
+      referenceId: id,
+      title: quiz.title,
+      durationSeconds: timeTakenSeconds,
+    });
+
+    return created!;
   });
 
-  return c.json(
-    { ...attempt, results: graded },
-    201,
-  );
+  return c.json({ ...attempt, results: graded }, 201);
 });
 
 // GET /quizzes/:id/attempts  (history user untuk quiz ini)
@@ -161,34 +177,43 @@ route.get("/:id/attempts", async (c) => {
 route.post("/:id/like", async (c) => {
   const userId = c.get("userId");
   const id = c.req.param("id");
-  const inserted = await db
-    .insert(quizLikes)
-    .values({ userId, quizId: id })
-    .onConflictDoNothing()
-    .returning();
-  if (inserted.length) {
-    await db
-      .update(quizzes)
-      .set({ likesCount: sql`${quizzes.likesCount} + 1` })
-      .where(eq(quizzes.id, id));
-  }
-  return c.json({ liked: true });
+
+  const liked = await db.transaction(async (tx) => {
+    const inserted = await tx
+      .insert(quizLikes)
+      .values({ userId, quizId: id })
+      .onConflictDoNothing()
+      .returning();
+    if (inserted.length) {
+      await tx
+        .update(quizzes)
+        .set({ likesCount: sql`${quizzes.likesCount} + 1` })
+        .where(eq(quizzes.id, id));
+    }
+    return true;
+  });
+
+  return c.json({ liked });
 });
 
 // DELETE /quizzes/:id/like
 route.delete("/:id/like", async (c) => {
   const userId = c.get("userId");
   const id = c.req.param("id");
-  const deleted = await db
-    .delete(quizLikes)
-    .where(and(eq(quizLikes.userId, userId), eq(quizLikes.quizId, id)))
-    .returning();
-  if (deleted.length) {
-    await db
-      .update(quizzes)
-      .set({ likesCount: sql`greatest(${quizzes.likesCount} - 1, 0)` })
-      .where(eq(quizzes.id, id));
-  }
+
+  await db.transaction(async (tx) => {
+    const deleted = await tx
+      .delete(quizLikes)
+      .where(and(eq(quizLikes.userId, userId), eq(quizLikes.quizId, id)))
+      .returning();
+    if (deleted.length) {
+      await tx
+        .update(quizzes)
+        .set({ likesCount: sql`greatest(${quizzes.likesCount} - 1, 0)` })
+        .where(eq(quizzes.id, id));
+    }
+  });
+
   return c.json({ liked: false });
 });
 

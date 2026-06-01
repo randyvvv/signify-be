@@ -214,7 +214,11 @@ export const openApiDocument = {
                   type: "object",
                   properties: {
                     questionId: { type: "string", format: "uuid" },
+                    question: { type: "string" },
+                    type: { type: "string", enum: ["text", "image"] },
+                    term: { type: "string", nullable: true },
                     selectedIndex: { type: "integer" },
+                    correctIndex: { type: "integer" },
                     isCorrect: { type: "boolean" },
                   },
                 },
