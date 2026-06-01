@@ -3,7 +3,8 @@ import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { eq, sql, desc } from "drizzle-orm";
 import { db } from "../db/index.js";
-import { signPracticeSessions, activities } from "../db/schema.js";
+import { signPracticeSessions } from "../db/schema.js";
+import { recordActivity } from "../services/activity.js";
 import { requireAuth, type AuthVariables } from "../middleware/auth.js";
 
 const route = new Hono<{ Variables: AuthVariables }>();
@@ -34,17 +35,20 @@ route.post("/sessions", zValidator("json", sessionSchema), async (c) => {
   const userId = c.get("userId");
   const { durationSeconds, ...data } = c.req.valid("json");
 
-  const [session] = await db
-    .insert(signPracticeSessions)
-    .values({ userId, ...data })
-    .returning();
+  const session = await db.transaction(async (tx) => {
+    const [created] = await tx
+      .insert(signPracticeSessions)
+      .values({ userId, ...data })
+      .returning();
 
-  await db.insert(activities).values({
-    userId,
-    type: "practice",
-    referenceId: session!.id,
-    title: `Sign Practice: ${data.category}`,
-    durationSeconds,
+    await recordActivity(tx, userId, {
+      type: "practice",
+      referenceId: created!.id,
+      title: `Sign Practice: ${data.category}`,
+      durationSeconds,
+    });
+
+    return created!;
   });
 
   return c.json(session, 201);

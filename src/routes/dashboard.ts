@@ -3,24 +3,38 @@ import { and, desc, eq, gte, sql } from "drizzle-orm";
 import { db } from "../db/index.js";
 import {
   users,
+  userPreferences,
   materials,
   userMaterialProgress,
   quizzes,
   activities,
 } from "../db/schema.js";
+import { notFound } from "../lib/errors.js";
 import { requireAuth, type AuthVariables } from "../middleware/auth.js";
 
 const route = new Hono<{ Variables: AuthVariables }>();
 route.use("*", requireAuth);
 
-const DAILY_GOAL_TARGET = 50; // target poin per hari
+// Target menit belajar harian, diturunkan dari preferensi frekuensi onboarding.
+const DAILY_GOAL_BY_FREQUENCY: Record<string, number> = {
+  casual: 10,
+  regular: 20,
+  intensive: 30,
+};
+const DEFAULT_DAILY_GOAL = 20;
 
 // GET /dashboard  -> semua data yang dibutuhkan halaman dashboard
 route.get("/", async (c) => {
   const userId = c.get("userId");
 
   const user = await db.query.users.findFirst({ where: eq(users.id, userId) });
-  if (!user) return c.json({ error: "User tidak ditemukan" }, 404);
+  if (!user) throw notFound("User tidak ditemukan");
+
+  const prefs = await db.query.userPreferences.findFirst({
+    where: eq(userPreferences.userId, userId),
+  });
+  const goalTarget =
+    DAILY_GOAL_BY_FREQUENCY[prefs?.frequency ?? ""] ?? DEFAULT_DAILY_GOAL;
 
   // rank by coins
   const [rankRow] = await db
@@ -78,9 +92,9 @@ route.get("/", async (c) => {
       rank,
       totalLearningHours: +(user.totalLearningSeconds / 3600).toFixed(1),
       dailyGoal: {
-        target: DAILY_GOAL_TARGET,
+        target: goalTarget,
         current: dailyMinutes,
-        percent: Math.min(100, Math.round((dailyMinutes / DAILY_GOAL_TARGET) * 100)),
+        percent: Math.min(100, Math.round((dailyMinutes / goalTarget) * 100)),
       },
     },
     recommended: recommended.map((r) => ({ ...r.material, progress: r.progress ?? 0 })),
