@@ -23,17 +23,47 @@ Get `DATABASE_URL` from Supabase: **Project Settings → Database → Connection
 ## Migrations & seed
 
 ```bash
-pnpm db:generate   # generate SQL migration files from schema.ts
-pnpm db:push       # apply the schema directly to the DB (fastest for dev)
-pnpm db:seed       # insert sample data (materials, quiz, shop items)
-pnpm db:studio     # open Drizzle Studio
+pnpm db:generate     # generate SQL migration files from schema.ts
+pnpm db:migrate:run  # apply migration files (programmatic migrator — recommended)
+pnpm db:seed         # insert sample data + demo user (idempotent)
+pnpm db:studio       # open Drizzle Studio
 ```
+
+- `db:migrate:run` uses the drizzle-orm migrator (`src/db/migrate.ts`); it just runs
+  the SQL files in `drizzle/` and does **not** introspect the DB. Prefer it over
+  `drizzle-kit push`, which can crash introspecting a Supabase database on
+  drizzle-kit 0.30.x.
+- `db:seed` is idempotent (skips if data already exists). Re-seed from scratch with
+  `SEED_RESET=true pnpm db:seed`. It creates a demo login: **demo@signify.app / password123**.
 
 ## Run
 
 ```bash
 pnpm dev     # http://localhost:8787
 ```
+
+## Smoke test
+
+With the server running and the DB seeded, run the end-to-end happy path
+(register → login → me → preferences → dashboard → quiz attempt → purchase):
+
+```bash
+pnpm smoke               # against http://localhost:8787
+BASE_URL=https://… pnpm smoke   # against a deployed instance
+```
+
+## Deploy (Railway)
+
+`railway.json` is included. Railway builds with Nixpacks (`pnpm build`) and starts with:
+
+```
+node dist/db/migrate.js && node dist/index.js
+```
+
+so pending migrations run on every deploy before the server boots. Set the
+environment variables from `.env.example` in the Railway service
+(`DATABASE_URL`, `JWT_SECRET`, `CORS_ORIGIN`, `AI_ENABLED`, …). Use the Supabase
+*Direct connection* string for `DATABASE_URL` in production.
 
 ## API docs (Swagger)
 
