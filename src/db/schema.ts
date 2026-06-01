@@ -260,6 +260,24 @@ export const activities = pgTable(
 );
 
 /* ------------------------------------------------------------------ */
+/* Live translator sessions (AI — diisi worker saat model siap)        */
+/* ------------------------------------------------------------------ */
+export const translatorSessions = pgTable(
+  "translator_sessions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    sourceUrl: text("source_url").notNull(),
+    status: text("status").notNull().default("pending"), // pending | processing | done | error
+    transcript: jsonb("transcript").$type<string[]>(), // diisi saat selesai
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("translator_sessions_user_idx").on(t.userId, t.createdAt)],
+);
+
+/* ------------------------------------------------------------------ */
 /* Tipe bantu                                                          */
 /* ------------------------------------------------------------------ */
 export type User = typeof users.$inferSelect;

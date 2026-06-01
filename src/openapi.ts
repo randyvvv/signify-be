@@ -22,6 +22,7 @@ export const openApiDocument = {
     { name: "Shop" },
     { name: "Sign Practice" },
     { name: "Leaderboard" },
+    { name: "AI" },
     { name: "System" },
   ],
   components: {
@@ -266,6 +267,24 @@ export const openApiDocument = {
           referenceId: { type: "string", format: "uuid", nullable: true },
           title: { type: "string" },
           durationSeconds: { type: "integer" },
+          createdAt: { type: "string", format: "date-time" },
+        },
+      },
+      TranslatorSession: {
+        type: "object",
+        properties: {
+          id: { type: "string", format: "uuid" },
+          userId: { type: "string", format: "uuid" },
+          sourceUrl: { type: "string", format: "uri" },
+          status: {
+            type: "string",
+            enum: ["pending", "processing", "done", "error"],
+          },
+          transcript: {
+            type: "array",
+            items: { type: "string" },
+            nullable: true,
+          },
           createdAt: { type: "string", format: "date-time" },
         },
       },
@@ -1183,6 +1202,127 @@ export const openApiDocument = {
               },
             },
           },
+          "401": { $ref: "#/components/responses/Unauthorized" },
+        },
+      },
+    },
+    "/api/chat": {
+      post: {
+        tags: ["AI"],
+        summary: "Signify chatbot (stub — model not ready)",
+        description:
+          "Returns 503 ai_unavailable when AI_ENABLED is false; a placeholder reply otherwise.",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["message"],
+                properties: {
+                  materialId: { type: "string", format: "uuid" },
+                  message: { type: "string", minLength: 1 },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "OK",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    reply: { type: "string" },
+                    model: { type: "string", nullable: true },
+                  },
+                },
+              },
+            },
+          },
+          "503": {
+            description: "AI not available yet",
+            content: {
+              "application/json": { schema: { $ref: "#/components/schemas/Error" } },
+            },
+          },
+          "401": { $ref: "#/components/responses/Unauthorized" },
+        },
+      },
+    },
+    "/api/translator/sessions": {
+      post: {
+        tags: ["AI"],
+        summary: "Register a livestream URL for translation (stub)",
+        description:
+          "Creates a session with status 'pending'. Transcript is filled by the AI worker when the model is ready.",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["sourceUrl"],
+                properties: { sourceUrl: { type: "string", format: "uri" } },
+              },
+            },
+          },
+        },
+        responses: {
+          "201": {
+            description: "Created",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/TranslatorSession" },
+              },
+            },
+          },
+          "401": { $ref: "#/components/responses/Unauthorized" },
+        },
+      },
+      get: {
+        tags: ["AI"],
+        summary: "List the user's translator sessions",
+        responses: {
+          "200": {
+            description: "OK",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "array",
+                  items: { $ref: "#/components/schemas/TranslatorSession" },
+                },
+              },
+            },
+          },
+          "401": { $ref: "#/components/responses/Unauthorized" },
+        },
+      },
+    },
+    "/api/translator/sessions/{id}": {
+      get: {
+        tags: ["AI"],
+        summary: "Translator session detail",
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            schema: { type: "string", format: "uuid" },
+          },
+        ],
+        responses: {
+          "200": {
+            description: "OK",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/TranslatorSession" },
+              },
+            },
+          },
+          "404": { $ref: "#/components/responses/NotFound" },
           "401": { $ref: "#/components/responses/Unauthorized" },
         },
       },

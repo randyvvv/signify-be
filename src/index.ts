@@ -15,6 +15,8 @@ import shop from "./routes/shop.js";
 import signPractice from "./routes/sign-practice.js";
 import dashboard from "./routes/dashboard.js";
 import leaderboard from "./routes/leaderboard.js";
+import chat from "./routes/chat.js";
+import translator from "./routes/translator.js";
 
 const app = new Hono();
 
@@ -44,6 +46,8 @@ api.route("/shop", shop);
 api.route("/sign-practice", signPractice);
 api.route("/dashboard", dashboard);
 api.route("/leaderboard", leaderboard);
+api.route("/chat", chat);
+api.route("/translator", translator);
 
 app.route("/api", api);
 

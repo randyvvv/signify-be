@@ -26,3 +26,5 @@ export const notFound = (message = "Tidak ditemukan", code = "not_found") =>
   new AppError(404, message, code);
 export const conflict = (message: string, code = "conflict") =>
   new AppError(409, message, code);
+export const serviceUnavailable = (message: string, code = "service_unavailable") =>
+  new AppError(503, message, code);

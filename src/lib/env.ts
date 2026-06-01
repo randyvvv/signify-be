@@ -16,4 +16,6 @@ export const env = {
   CORS_ORIGIN: (process.env.CORS_ORIGIN ?? "http://localhost:3000")
     .split(",")
     .map((o) => o.trim()),
+  // Aktifkan fitur AI (chatbot/translator). Model belum ada, jadi default false.
+  AI_ENABLED: process.env.AI_ENABLED === "true",
 };
