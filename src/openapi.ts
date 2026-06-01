@@ -539,6 +539,36 @@ export const openApiDocument = {
         },
       },
     },
+    "/api/me/items": {
+      get: {
+        tags: ["Profile"],
+        summary: "Items the user owns (incl. defaults) + equipped map",
+        responses: {
+          "200": {
+            description: "OK",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    items: {
+                      type: "array",
+                      items: { $ref: "#/components/schemas/ShopItem" },
+                    },
+                    equipped: {
+                      type: "object",
+                      additionalProperties: { type: "string", format: "uuid" },
+                      description: "category -> equipped itemId",
+                    },
+                  },
+                },
+              },
+            },
+          },
+          "401": { $ref: "#/components/responses/Unauthorized" },
+        },
+      },
+    },
     "/api/dashboard": {
       get: {
         tags: ["Dashboard"],
