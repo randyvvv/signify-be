@@ -1,18 +1,16 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
-import { eq, sql, and } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { users, userPreferences } from "../db/schema.js";
+import { hashPassword, verifyPassword } from "../lib/auth.js";
+import { publicUser } from "../lib/user.js";
+import { badRequest, notFound, unauthorized } from "../lib/errors.js";
 import { requireAuth, type AuthVariables } from "../middleware/auth.js";
 
 const profile = new Hono<{ Variables: AuthVariables }>();
 profile.use("*", requireAuth);
-
-function publicUser(u: typeof users.$inferSelect) {
-  const { passwordHash, ...rest } = u;
-  return rest;
-}
 
 // Hitung rank berdasarkan coins (jumlah user dengan coins lebih banyak + 1).
 async function getRank(userId: string): Promise<number> {
@@ -98,6 +96,35 @@ profile.put("/preferences", zValidator("json", prefsSchema), async (c) => {
     return c.json(created);
   }
   return c.json(updated);
+});
+
+const passwordSchema = z.object({
+  currentPassword: z.string().min(1),
+  newPassword: z.string().min(6),
+});
+
+// POST /me/password  -> ganti password
+profile.post("/password", zValidator("json", passwordSchema), async (c) => {
+  const userId = c.get("userId");
+  const { currentPassword, newPassword } = c.req.valid("json");
+
+  const user = await db.query.users.findFirst({ where: eq(users.id, userId) });
+  if (!user) throw notFound("User tidak ditemukan");
+
+  if (!(await verifyPassword(currentPassword, user.passwordHash))) {
+    throw unauthorized("Password lama salah", "invalid_password");
+  }
+  if (await verifyPassword(newPassword, user.passwordHash)) {
+    throw badRequest("Password baru harus berbeda", "password_unchanged");
+  }
+
+  const passwordHash = await hashPassword(newPassword);
+  await db
+    .update(users)
+    .set({ passwordHash, updatedAt: new Date() })
+    .where(eq(users.id, userId));
+
+  return c.json({ ok: true });
 });
 
 export default profile;
