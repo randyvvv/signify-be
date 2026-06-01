@@ -3,50 +3,71 @@ import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { and, eq, ilike, ne, sql } from "drizzle-orm";
 import { db } from "../db/index.js";
-import { materials, userMaterialProgress, users, activities } from "../db/schema.js";
+import { materials, userMaterialProgress } from "../db/schema.js";
+import { parsePagination, paginated } from "../lib/pagination.js";
+import { notFound } from "../lib/errors.js";
+import { recordActivity } from "../services/activity.js";
 import { requireAuth, type AuthVariables } from "../middleware/auth.js";
 
 const route = new Hono<{ Variables: AuthVariables }>();
 route.use("*", requireAuth);
 
-// GET /materials?search=&category=&language=&page=
+// GET /materials?search=&category=&language=&page=&limit=
 route.get("/", async (c) => {
   const userId = c.get("userId");
   const search = c.req.query("search")?.trim();
-  const category = c.req.query("category");
-  const language = c.req.query("language");
-  const page = Math.max(1, Number(c.req.query("page") ?? 1));
-  const limit = Math.min(50, Number(c.req.query("limit") ?? 12));
+  const category = c.req.query("category")?.trim();
+  const language = c.req.query("language")?.trim();
+  const { page, limit, offset } = parsePagination({
+    page: c.req.query("page"),
+    limit: c.req.query("limit"),
+  });
 
   const conditions = [];
   if (search) conditions.push(ilike(materials.title, `%${search}%`));
   if (category) conditions.push(eq(materials.category, category));
   if (language) conditions.push(eq(materials.language, language));
-
   const where = conditions.length ? and(...conditions) : undefined;
 
-  const rows = await db
-    .select({
-      material: materials,
-      progress: userMaterialProgress.progress,
-    })
-    .from(materials)
-    .leftJoin(
-      userMaterialProgress,
-      and(
-        eq(userMaterialProgress.materialId, materials.id),
-        eq(userMaterialProgress.userId, userId),
-      ),
-    )
-    .where(where)
-    .limit(limit)
-    .offset((page - 1) * limit);
+  const [rows, [countRow]] = await Promise.all([
+    db
+      .select({ material: materials, progress: userMaterialProgress.progress })
+      .from(materials)
+      .leftJoin(
+        userMaterialProgress,
+        and(
+          eq(userMaterialProgress.materialId, materials.id),
+          eq(userMaterialProgress.userId, userId),
+        ),
+      )
+      .where(where)
+      .limit(limit)
+      .offset(offset),
+    db.select({ total: sql<number>`count(*)` }).from(materials).where(where),
+  ]);
 
-  return c.json({
-    page,
-    limit,
-    items: rows.map((r) => ({ ...r.material, progress: r.progress ?? 0 })),
-  });
+  const items = rows.map((r) => ({ ...r.material, progress: r.progress ?? 0 }));
+  return c.json(paginated(items, page, limit, Number(countRow?.total ?? 0)));
+});
+
+// GET /materials/categories  -> daftar kategori + jumlah (untuk filter sidebar FE)
+route.get("/categories", async (c) => {
+  const rows = await db
+    .select({ name: materials.category, count: sql<number>`count(*)` })
+    .from(materials)
+    .groupBy(materials.category)
+    .orderBy(materials.category);
+  return c.json(rows.map((r) => ({ name: r.name, count: Number(r.count) })));
+});
+
+// GET /materials/languages  -> daftar bahasa + jumlah
+route.get("/languages", async (c) => {
+  const rows = await db
+    .select({ name: materials.language, count: sql<number>`count(*)` })
+    .from(materials)
+    .groupBy(materials.language)
+    .orderBy(materials.language);
+  return c.json(rows.map((r) => ({ name: r.name, count: Number(r.count) })));
 });
 
 // GET /materials/:id
@@ -54,7 +75,7 @@ route.get("/:id", async (c) => {
   const userId = c.get("userId");
   const id = c.req.param("id");
   const material = await db.query.materials.findFirst({ where: eq(materials.id, id) });
-  if (!material) return c.json({ error: "Material tidak ditemukan" }, 404);
+  if (!material) throw notFound("Material tidak ditemukan");
 
   const progress = await db.query.userMaterialProgress.findFirst({
     where: and(
@@ -70,7 +91,7 @@ route.get("/:id", async (c) => {
 route.get("/:id/recommended", async (c) => {
   const id = c.req.param("id");
   const material = await db.query.materials.findFirst({ where: eq(materials.id, id) });
-  if (!material) return c.json({ error: "Material tidak ditemukan" }, 404);
+  if (!material) throw notFound("Material tidak ditemukan");
 
   const recs = await db
     .select()
@@ -92,7 +113,7 @@ route.put("/:id/progress", zValidator("json", progressSchema), async (c) => {
   const { progress, durationSeconds = 0 } = c.req.valid("json");
 
   const material = await db.query.materials.findFirst({ where: eq(materials.id, id) });
-  if (!material) return c.json({ error: "Material tidak ditemukan" }, 404);
+  if (!material) throw notFound("Material tidak ditemukan");
 
   const completed = progress >= 100;
   const [row] = await db
@@ -104,14 +125,10 @@ route.put("/:id/progress", zValidator("json", progressSchema), async (c) => {
     })
     .returning();
 
-  // Catat waktu belajar + aktivitas.
-  if (durationSeconds > 0) {
-    await db
-      .update(users)
-      .set({ totalLearningSeconds: sql`${users.totalLearningSeconds} + ${durationSeconds}` })
-      .where(eq(users.id, userId));
-    await db.insert(activities).values({
-      userId,
+  // Catat aktivitas (sekaligus update waktu belajar + streak) kalau ada waktu
+  // belajar atau material baru saja diselesaikan.
+  if (durationSeconds > 0 || completed) {
+    await recordActivity(db, userId, {
       type: "material",
       referenceId: id,
       title: material.title,
