@@ -604,18 +604,70 @@ export const openApiDocument = {
                 schema: {
                   type: "object",
                   properties: {
-                    page: { type: "integer" },
-                    limit: { type: "integer" },
                     items: {
                       type: "array",
                       items: { $ref: "#/components/schemas/Material" },
                     },
+                    page: { type: "integer" },
+                    limit: { type: "integer" },
+                    total: { type: "integer" },
+                    totalPages: { type: "integer" },
                   },
                 },
               },
             },
           },
           "401": { $ref: "#/components/responses/Unauthorized" },
+        },
+      },
+    },
+    "/api/materials/categories": {
+      get: {
+        tags: ["Materials"],
+        summary: "Distinct material categories with counts",
+        responses: {
+          "200": {
+            description: "OK",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      name: { type: "string" },
+                      count: { type: "integer" },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    "/api/materials/languages": {
+      get: {
+        tags: ["Materials"],
+        summary: "Distinct material languages with counts",
+        responses: {
+          "200": {
+            description: "OK",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      name: { type: "string" },
+                      count: { type: "integer" },
+                    },
+                  },
+                },
+              },
+            },
+          },
         },
       },
     },
