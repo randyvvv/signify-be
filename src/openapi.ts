@@ -1200,8 +1200,18 @@ export const openApiDocument = {
             content: {
               "application/json": {
                 schema: {
-                  type: "array",
-                  items: { $ref: "#/components/schemas/LeaderboardEntry" },
+                  type: "object",
+                  properties: {
+                    entries: {
+                      type: "array",
+                      items: { $ref: "#/components/schemas/LeaderboardEntry" },
+                    },
+                    me: {
+                      allOf: [{ $ref: "#/components/schemas/LeaderboardEntry" }],
+                      nullable: true,
+                      description: "Current user's position (even if outside the limit)",
+                    },
+                  },
                 },
               },
             },
