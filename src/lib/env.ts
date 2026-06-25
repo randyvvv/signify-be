@@ -18,4 +18,6 @@ export const env = {
     .map((o) => o.trim()),
   // Aktifkan fitur AI (chatbot/translator). Model belum ada, jadi default false.
   AI_ENABLED: process.env.AI_ENABLED === "true",
+  GEMINI_API_KEY: process.env.GEMINI_API_KEY,
+  GEMINI_MODEL: process.env.GEMINI_MODEL ?? "gemini-2.5-flash",
 };

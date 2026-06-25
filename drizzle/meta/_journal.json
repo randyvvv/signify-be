@@ -15,6 +15,13 @@
       "when": 1780290969559,
       "tag": "0001_translator_sessions",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1782407797158,
+      "tag": "0002_chat_sessions",
+      "breakpoints": true
     }
   ]
 }

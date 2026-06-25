@@ -301,6 +301,12 @@ export const openApiDocument = {
       },
     },
     responses: {
+      BadRequest: {
+        description: "Invalid request",
+        content: {
+          "application/json": { schema: { $ref: "#/components/schemas/Error" } },
+        },
+      },
       Unauthorized: {
         description: "Missing or invalid token",
         content: {
@@ -1207,18 +1213,59 @@ export const openApiDocument = {
       },
     },
     "/api/chat": {
+      get: {
+        tags: ["AI"],
+        summary: "Get saved Signify chat history for a material",
+        parameters: [
+          {
+            name: "materialId",
+            in: "query",
+            required: true,
+            schema: { type: "string", format: "uuid" },
+          },
+        ],
+        responses: {
+          "200": {
+            description: "OK",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    sessionId: { type: "string", format: "uuid", nullable: true },
+                    messages: {
+                      type: "array",
+                      items: {
+                        type: "object",
+                        properties: {
+                          id: { type: "string", format: "uuid" },
+                          role: { type: "string", enum: ["user", "assistant"] },
+                          content: { type: "string" },
+                          createdAt: { type: "string", format: "date-time" },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          "400": { $ref: "#/components/responses/BadRequest" },
+          "401": { $ref: "#/components/responses/Unauthorized" },
+        },
+      },
       post: {
         tags: ["AI"],
-        summary: "Signify chatbot (stub — model not ready)",
+        summary: "Signify material-grounded chatbot",
         description:
-          "Returns 503 ai_unavailable when AI_ENABLED is false; a placeholder reply otherwise.",
+          "Returns 503 ai_unavailable when AI_ENABLED is false. When enabled, answers from the selected material context using Gemini.",
         requestBody: {
           required: true,
           content: {
             "application/json": {
               schema: {
                 type: "object",
-                required: ["message"],
+                required: ["materialId", "message"],
                 properties: {
                   materialId: { type: "string", format: "uuid" },
                   message: { type: "string", minLength: 1 },
@@ -1236,12 +1283,15 @@ export const openApiDocument = {
                   type: "object",
                   properties: {
                     reply: { type: "string" },
-                    model: { type: "string", nullable: true },
+                    model: { type: "string" },
+                    sessionId: { type: "string", format: "uuid" },
                   },
                 },
               },
             },
           },
+          "400": { $ref: "#/components/responses/BadRequest" },
+          "404": { $ref: "#/components/responses/NotFound" },
           "503": {
             description: "AI not available yet",
             content: {

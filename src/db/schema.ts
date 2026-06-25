@@ -260,6 +260,43 @@ export const activities = pgTable(
 );
 
 /* ------------------------------------------------------------------ */
+/* Chatbot sessions + history                                          */
+/* ------------------------------------------------------------------ */
+export const chatSessions = pgTable(
+  "chat_sessions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    materialId: uuid("material_id")
+      .notNull()
+      .references(() => materials.id, { onDelete: "cascade" }),
+    summary: text("summary"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("chat_sessions_user_material_unique").on(t.userId, t.materialId),
+    index("chat_sessions_user_idx").on(t.userId, t.updatedAt),
+  ],
+);
+
+export const chatMessages = pgTable(
+  "chat_messages",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    sessionId: uuid("session_id")
+      .notNull()
+      .references(() => chatSessions.id, { onDelete: "cascade" }),
+    role: text("role").notNull(), // user | assistant
+    content: text("content").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("chat_messages_session_idx").on(t.sessionId, t.createdAt)],
+);
+
+/* ------------------------------------------------------------------ */
 /* Live translator sessions (AI — diisi worker saat model siap)        */
 /* ------------------------------------------------------------------ */
 export const translatorSessions = pgTable(
@@ -285,3 +322,5 @@ export type NewUser = typeof users.$inferInsert;
 export type Material = typeof materials.$inferSelect;
 export type Quiz = typeof quizzes.$inferSelect;
 export type ShopItem = typeof shopItems.$inferSelect;
+export type ChatSession = typeof chatSessions.$inferSelect;
+export type ChatMessage = typeof chatMessages.$inferSelect;
