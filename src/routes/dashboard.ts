@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { and, desc, eq, gte, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, sql } from "drizzle-orm";
 import { db } from "../db/index.js";
 import {
   users,
@@ -11,6 +11,7 @@ import {
 } from "../db/schema.js";
 import { notFound } from "../lib/errors.js";
 import { requireAuth, type AuthVariables } from "../middleware/auth.js";
+import { getDailyQuizOffset, rankRecommendedMaterials } from "../services/dashboard.js";
 
 const route = new Hono<{ Variables: AuthVariables }>();
 route.use("*", requireAuth);
@@ -52,9 +53,13 @@ route.get("/", async (c) => {
     .where(and(eq(activities.userId, userId), gte(activities.createdAt, startOfToday)));
   const dailyMinutes = Math.round(Number(todayRow?.seconds ?? 0) / 60);
 
-  // recommended materials: yang belum selesai / belum dimulai
-  const recommended = await db
-    .select({ material: materials, progress: userMaterialProgress.progress })
+  // recommended materials: preferensi onboarding + progres user.
+  const recommendationCandidates = await db
+    .select({
+      material: materials,
+      progress: userMaterialProgress.progress,
+      completed: userMaterialProgress.completed,
+    })
     .from(materials)
     .leftJoin(
       userMaterialProgress,
@@ -62,23 +67,36 @@ route.get("/", async (c) => {
         eq(userMaterialProgress.materialId, materials.id),
         eq(userMaterialProgress.userId, userId),
       ),
-    )
-    .limit(5);
+    );
+  const recommended = rankRecommendedMaterials(recommendationCandidates, {
+    goals: prefs?.goals,
+    masterFocus: prefs?.masterFocus,
+    language: prefs?.language,
+  });
 
-  // recent activity
+  // recent activity: 30 hari terakhir, dengan batas supaya payload tetap kecil.
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
   const recentActivity = await db
     .select()
     .from(activities)
-    .where(eq(activities.userId, userId))
+    .where(and(eq(activities.userId, userId), gte(activities.createdAt, thirtyDaysAgo)))
     .orderBy(desc(activities.createdAt))
-    .limit(10);
+    .limit(50);
 
-  // daily quiz: ambil satu quiz (paling populer)
-  const [dailyQuiz] = await db
-    .select()
-    .from(quizzes)
-    .orderBy(desc(quizzes.likesCount))
-    .limit(1);
+  // daily quiz: rotasi deterministik per tanggal UTC.
+  const [quizCountRow] = await db
+    .select({ total: sql<number>`count(*)` })
+    .from(quizzes);
+  const dailyQuizOffset = getDailyQuizOffset(Number(quizCountRow?.total ?? 0));
+  const [dailyQuiz] =
+    dailyQuizOffset === null
+      ? []
+      : await db
+          .select()
+          .from(quizzes)
+          .orderBy(asc(quizzes.createdAt))
+          .limit(1)
+          .offset(dailyQuizOffset);
 
   return c.json({
     user: {
