@@ -43,7 +43,11 @@ async function seed() {
   console.log("Seeding...");
 
   // ---- Shop items (sesuai signify-fe/src/components/shop/data.ts) ----
+  // Avatar: imageUrl menyimpan path file .vrm di public/ frontend.
   await db.insert(shopItems).values([
+    { name: "Classic", price: 0, category: "Avatar", imageUrl: "/avatar.vrm", isDefault: true },
+    { name: "Casual", price: 200, category: "Avatar", imageUrl: "/avatar-b.vrm" },
+    { name: "Sporty", price: 200, category: "Avatar", imageUrl: "/avatar-c.vrm" },
     { name: "Bun", price: 0, category: "Hair", isDefault: true },
     { name: "Braids", price: 200, category: "Hair" },
     { name: "Sideswept Bob", price: 200, category: "Hair" },
