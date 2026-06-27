@@ -47,6 +47,18 @@ route.get("/popular", async (c) => {
   return c.json(rows);
 });
 
+// GET /quizzes/meta
+route.get("/meta", async (c) => {
+  const rows = await db.select({ category: quizzes.category, level: quizzes.level }).from(quizzes);
+  const byCategory: Record<string, number> = {};
+  const byLevel: Record<string, number> = {};
+  for (const r of rows) {
+    byCategory[r.category] = (byCategory[r.category] || 0) + 1;
+    byLevel[r.level] = (byLevel[r.level] || 0) + 1;
+  }
+  return c.json({ byCategory, byLevel });
+});
+
 // GET /quizzes/:id  (+ questions, tanpa membocorkan correctIndex)
 route.get("/:id", async (c) => {
   const id = c.req.param("id");
@@ -62,7 +74,7 @@ route.get("/:id", async (c) => {
   return c.json({
     ...quiz,
     totalQuestions: questions.length,
-    questions: questions.map(({ correctIndex, ...q }) => q),
+    questions: questions,
   });
 });
 

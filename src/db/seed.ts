@@ -250,44 +250,139 @@ async function seed() {
   ]);
 
   // ---- Quiz + questions ----
-  const [quiz] = await db
+  const createdQuizzes = await db
     .insert(quizzes)
-    .values({
-      title: "Scientific & Technical Terms",
-      description: "Latih kosakata teknis lewat kuis singkat.",
-      category: "Vocational",
-      level: "BEGINNER",
-      likesCount: 743,
-      rewardCoins: 50,
-    })
+    .values([
+      {
+        title: "Scientific & Technical Terms",
+        description: "Practice less-common academic & technical vocabulary through quick quizzes.",
+        category: "Vocational",
+        level: "BEGINNER",
+        likesCount: 743,
+        rewardCoins: 50,
+        thumbnailUrl: "/learning-materials/microphone.png",
+      },
+      {
+        title: "Job Interview Phrases",
+        description: "Practice less-common academic & technical vocabulary through quick quizzes.",
+        category: "Vocational",
+        level: "BEGINNER",
+        likesCount: 743,
+        rewardCoins: 50,
+        thumbnailUrl: "/learning-materials/career.png",
+      },
+      {
+        title: "K-12 Basic Signs",
+        description: "Essential sign language vocabulary for young learners and beginners.",
+        category: "K-12",
+        level: "BEGINNER",
+        likesCount: 1200,
+        rewardCoins: 30,
+        thumbnailUrl: "/learning-materials/k-12.png",
+      },
+      {
+        title: "University Level Phrases",
+        description: "Advanced phrases for university students and academic discussions.",
+        category: "University",
+        level: "INTERMEDIATE",
+        likesCount: 500,
+        rewardCoins: 70,
+        thumbnailUrl: "/learning-materials/video-template.png",
+      },
+      {
+        title: "Expert Sign Language",
+        description: "Master the art of sign language with these expert-level phrases.",
+        category: "Sign Language",
+        level: "EXPERT",
+        likesCount: 200,
+        rewardCoins: 100,
+        thumbnailUrl: "/learning-materials/vocational.png",
+      },
+      {
+        title: "Career Advancement",
+        description: "Vocabulary for professional growth and career advancement.",
+        category: "Career",
+        level: "INTERMEDIATE",
+        likesCount: 890,
+        rewardCoins: 60,
+        thumbnailUrl: "/learning-materials/career.png",
+      }
+    ])
     .returning();
 
-  if (quiz) {
-    await db.insert(quizQuestions).values([
-      {
-        quizId: quiz.id,
-        ordering: 1,
-        type: "text",
-        question: "What is the correct term for this sign?",
-        promptImageUrl: "/quizzes/hand.png",
-        options: ["Aljabar", "Kalkulus", "Trigonometri", "Geometri"],
-        correctIndex: 0,
-      },
-      {
-        quizId: quiz.id,
-        ordering: 2,
-        type: "image",
-        question: "What is the correct sign for this term?",
-        term: "Algebra",
-        options: [
-          "/learning-materials/avatar.png",
-          "/learning-materials/avatar.png",
-          "/learning-materials/avatar.png",
-          "/learning-materials/avatar.png",
-        ],
-        correctIndex: 0,
-      },
-    ]);
+  const CUSTOM_DICTIONARY = [
+    { term: "A", imageUrl: "/quizzes/A.jpg" },
+    { term: "B", imageUrl: "/quizzes/B.jpg" },
+    { term: "Chair", imageUrl: "/quizzes/Chair.jpg" },
+    { term: "Cold", imageUrl: "/quizzes/Cold.jpg" },
+    { term: "D", imageUrl: "/quizzes/D.jpg" },
+    { term: "E", imageUrl: "/quizzes/E.jpg" },
+    { term: "F", imageUrl: "/quizzes/F.jpg" },
+    { term: "K", imageUrl: "/quizzes/K.jpg" },
+    { term: "Kiss", imageUrl: "/quizzes/Kiss.jpg" },
+    { term: "M", imageUrl: "/quizzes/M.jpg" },
+    { term: "Mad", imageUrl: "/quizzes/Mad.jpg" },
+    { term: "O", imageUrl: "/quizzes/O.jpg" },
+    { term: "P", imageUrl: "/quizzes/P.jpg" },
+    { term: "Sleep", imageUrl: "/quizzes/Sleep.jpg" },
+    { term: "Thank You", imageUrl: "/quizzes/Thank You.jpg" },
+    { term: "Want", imageUrl: "/quizzes/Want.jpg" }
+  ];
+
+  function shuffle<T>(array: T[]): T[] {
+    const arr = [...array];
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [arr[i], arr[j]] = [arr[j]!, arr[i]!];
+    }
+    return arr;
+  }
+
+  for (const quiz of createdQuizzes) {
+    const numQuestions = Math.floor(Math.random() * 6) + 5; // 5 to 10 questions
+    const questionsToInsert = [];
+
+    for (let i = 1; i <= numQuestions; i++) {
+      const type = Math.random() > 0.5 ? "text" : "image";
+      
+      if (type === "text") {
+        const correctPair = CUSTOM_DICTIONARY[Math.floor(Math.random() * CUSTOM_DICTIONARY.length)]!;
+        
+        let wrongPairs = CUSTOM_DICTIONARY.filter(p => p.term !== correctPair.term);
+        wrongPairs = shuffle(wrongPairs).slice(0, 3);
+        const options = shuffle([correctPair.term, ...wrongPairs.map(p => p.term)]);
+        const correctIndex = options.indexOf(correctPair.term);
+
+        questionsToInsert.push({
+          quizId: quiz.id,
+          ordering: i,
+          type: "text",
+          question: "What is the correct term for this sign?",
+          promptImageUrl: correctPair.imageUrl,
+          options: options,
+          correctIndex: correctIndex,
+        });
+      } else {
+        const correctPair = CUSTOM_DICTIONARY[Math.floor(Math.random() * CUSTOM_DICTIONARY.length)]!;
+        
+        let wrongPairs = CUSTOM_DICTIONARY.filter(p => p.imageUrl !== correctPair.imageUrl);
+        wrongPairs = shuffle(wrongPairs).slice(0, 3);
+        const options = shuffle([correctPair.imageUrl, ...wrongPairs.map(p => p.imageUrl)]);
+        const correctIndex = options.indexOf(correctPair.imageUrl);
+
+        questionsToInsert.push({
+          quizId: quiz.id,
+          ordering: i,
+          type: "image",
+          question: `What is the correct sign for "${correctPair.term}"?`,
+          term: correctPair.term,
+          options: options,
+          correctIndex: correctIndex,
+        });
+      }
+    }
+    
+    await db.insert(quizQuestions).values(questionsToInsert as any[]);
   }
 
   // ---- Demo user (idempoten by email) ----
