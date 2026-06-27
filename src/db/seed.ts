@@ -260,7 +260,7 @@ async function seed() {
         level: "BEGINNER",
         likesCount: 743,
         rewardCoins: 50,
-        thumbnailUrl: "/learning-materials/microphone.png",
+        thumbnailUrl: "/quizzes-thumb/quiz-science.jpg",
       },
       {
         title: "Job Interview Phrases",
@@ -269,7 +269,7 @@ async function seed() {
         level: "BEGINNER",
         likesCount: 743,
         rewardCoins: 50,
-        thumbnailUrl: "/learning-materials/career.png",
+        thumbnailUrl: "/quizzes-thumb/quiz-interview.jpg",
       },
       {
         title: "K-12 Basic Signs",
@@ -278,7 +278,7 @@ async function seed() {
         level: "BEGINNER",
         likesCount: 1200,
         rewardCoins: 30,
-        thumbnailUrl: "/learning-materials/k-12.png",
+        thumbnailUrl: "/quizzes-thumb/quiz-k12.jpg",
       },
       {
         title: "University Level Phrases",
@@ -287,7 +287,7 @@ async function seed() {
         level: "INTERMEDIATE",
         likesCount: 500,
         rewardCoins: 70,
-        thumbnailUrl: "/learning-materials/video-template.png",
+        thumbnailUrl: "/quizzes-thumb/quiz-university.jpg",
       },
       {
         title: "Expert Sign Language",
@@ -296,7 +296,7 @@ async function seed() {
         level: "EXPERT",
         likesCount: 200,
         rewardCoins: 100,
-        thumbnailUrl: "/learning-materials/vocational.png",
+        thumbnailUrl: "/quizzes-thumb/quiz-sign-language.jpg",
       },
       {
         title: "Career Advancement",
@@ -305,7 +305,7 @@ async function seed() {
         level: "INTERMEDIATE",
         likesCount: 890,
         rewardCoins: 60,
-        thumbnailUrl: "/learning-materials/career.png",
+        thumbnailUrl: "/quizzes-thumb/quiz-career.jpg",
       }
     ])
     .returning();
