@@ -113,7 +113,7 @@ export const openApiDocument = {
           language: { type: "string", example: "en" },
           durationMinutes: { type: "integer", nullable: true },
           pages: { type: "integer", nullable: true },
-          content: { type: "string", nullable: true },
+          content: { type: "array", items: { type: "string" }, nullable: true },
           articleUrl: { type: "string", nullable: true },
           videoUrl: { type: "string", nullable: true },
           transcript: { type: "array", items: { type: "string" }, nullable: true },

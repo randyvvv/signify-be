@@ -78,7 +78,7 @@ export const materials = pgTable(
     language: text("language").notNull().default("en"), // en | ja | ko | zh | id
     durationMinutes: integer("duration_minutes"),
     pages: integer("pages"),
-    content: text("content"),
+    content: jsonb("content").$type<string[]>(),
     articleUrl: text("article_url"),
     videoUrl: text("video_url"),
     transcript: jsonb("transcript").$type<string[]>(), // array paragraf

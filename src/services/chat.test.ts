@@ -49,7 +49,10 @@ test("buildMaterialContext handles document content", () => {
     material({
       type: "document",
       pages: 11,
-      content: "Document explanation about presentation technique.",
+      content: [
+        "Document explanation about presentation technique.",
+        "Second page with speaker pacing guidance.",
+      ],
     }),
   );
 
@@ -57,6 +60,8 @@ test("buildMaterialContext handles document content", () => {
   assert.match(ctx.sourceText, /Type: document/);
   assert.match(ctx.sourceText, /Pages: 11/);
   assert.match(ctx.sourceText, /Document content:/);
+  assert.match(ctx.sourceText, /Page 1: Document explanation/);
+  assert.match(ctx.sourceText, /Page 2: Second page/);
 });
 
 test("buildMaterialContext handles article content", () => {
@@ -64,7 +69,7 @@ test("buildMaterialContext handles article content", () => {
     material({
       type: "article",
       articleUrl: "https://example.com/article",
-      content: "Article explanation about linear equations.",
+      content: ["Article explanation about linear equations."],
     }),
   );
 

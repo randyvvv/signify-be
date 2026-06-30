@@ -45,6 +45,15 @@ function listBlock(label: string, values: string[]): string | null {
   return content ? `${label}:\n${content}` : null;
 }
 
+function pageBlock(label: string, values: string[] | null | undefined): string | null {
+  const content = (values ?? [])
+    .map(clean)
+    .filter(Boolean)
+    .map((page, index) => `Page ${index + 1}: ${page}`)
+    .join("\n\n");
+  return content ? `${label}:\n${content}` : null;
+}
+
 export interface MaterialAiContext {
   title: string;
   type: string;
@@ -73,16 +82,16 @@ export function buildMaterialContext(material: Material): MaterialAiContext {
     }
   } else if (material.type === "document") {
     if (material.pages !== null) body.push(`Pages: ${material.pages}`);
-    const content = clean(material.content);
+    const content = pageBlock("Document content", material.content);
     if (content) {
-      body.push(`Document content:\n${content}`);
+      body.push(content);
       hasUsableContent = true;
     }
   } else if (material.type === "article") {
     if (material.articleUrl) body.push(`Article URL: ${material.articleUrl}`);
-    const content = clean(material.content);
+    const content = listBlock("Article content", material.content ?? []);
     if (content) {
-      body.push(`Article content:\n${content}`);
+      body.push(content);
       hasUsableContent = true;
     }
   }
