@@ -143,6 +143,7 @@ Gated by `AI_ENABLED` (default `false`). The chatbot also requires
 |---|---|---|
 | GET | `/api/chat?materialId=` | saved material chat history for the authenticated user |
 | POST | `/api/chat` | material-grounded Signify chatbot using Gemini; `503 ai_unavailable` when disabled |
+| POST | `/api/translator/transcript` | `{ url, lang? }` → fetch YouTube captions (`{ cues, source }`) for the Live Translator |
 | POST | `/api/translator/sessions` | register a livestream URL; created with `status: "pending"` |
 | GET | `/api/translator/sessions` | list the user's sessions |
 | GET | `/api/translator/sessions/:id` | session detail |
