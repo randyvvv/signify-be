@@ -143,11 +143,11 @@ Gated by `AI_ENABLED` (default `false`). The chatbot also requires
 |---|---|---|
 | GET | `/api/chat?materialId=` | saved material chat history for the authenticated user |
 | POST | `/api/chat` | material-grounded Signify chatbot using Gemini; `503 ai_unavailable` when disabled |
-| POST | `/api/translator/transcript` | `{ url, lang? }` → fetch YouTube captions (`{ cues, source }`) for the Live Translator |
-| POST | `/api/translator/sessions` | register a livestream URL; created with `status: "pending"` |
+| POST | `/api/translator/transcript` | `{ url, lang? }` → fetch YouTube captions (`{ cues, source }`) that power the Live Translator |
+| POST | `/api/translator/sessions` | register a livestream URL and persist it for the user |
 | GET | `/api/translator/sessions` | list the user's sessions |
 | GET | `/api/translator/sessions/:id` | session detail |
 
-## Notes
-- Hand detection (MediaPipe) still runs on the **client** (the FE). The backend only stores results/progress.
-- Live Translator is still a persistence stub; the AI chatbot is implemented for learning materials when Gemini is configured.
+## Sign language model
+The sign language recognition model this backend integrates with lives in a
+separate repo: **[AlthariqFairuz/signify-model](https://github.com/AlthariqFairuz/signify-model)**.
