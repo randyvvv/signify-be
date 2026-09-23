@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
-import { and, eq, ilike, sql, desc } from "drizzle-orm";
+import { and, eq, ilike, isNull, or, sql, desc } from "drizzle-orm";
 import { db } from "../db/index.js";
 import {
   quizzes,
@@ -19,13 +19,20 @@ import { requireAuth, type AuthVariables } from "../middleware/auth.js";
 const route = new Hono<{ Variables: AuthVariables }>();
 route.use("*", requireAuth);
 
+// Kuis publik (ownerId null) + kuis pribadi milik user (mis. buatan Signify Coach).
+const visibleTo = (userId: string) => or(isNull(quizzes.ownerId), eq(quizzes.ownerId, userId));
+
+async function findVisibleQuiz(id: string, userId: string) {
+  return db.query.quizzes.findFirst({ where: and(eq(quizzes.id, id), visibleTo(userId)) });
+}
+
 // GET /quizzes?search=&category=&level=
 route.get("/", async (c) => {
   const search = c.req.query("search")?.trim();
   const category = c.req.query("category")?.trim();
   const level = c.req.query("level")?.trim();
 
-  const conditions = [];
+  const conditions = [visibleTo(c.get("userId"))];
   if (search) conditions.push(ilike(quizzes.title, `%${search}%`));
   if (category) conditions.push(eq(quizzes.category, category));
   if (level) conditions.push(eq(quizzes.level, level));
@@ -33,7 +40,7 @@ route.get("/", async (c) => {
   const rows = await db
     .select()
     .from(quizzes)
-    .where(conditions.length ? and(...conditions) : undefined)
+    .where(and(...conditions))
     .orderBy(desc(quizzes.createdAt));
   return c.json(rows);
 });
@@ -43,6 +50,7 @@ route.get("/popular", async (c) => {
   const rows = await db
     .select()
     .from(quizzes)
+    .where(isNull(quizzes.ownerId))
     .orderBy(desc(quizzes.likesCount))
     .limit(3);
   return c.json(rows);
@@ -50,7 +58,10 @@ route.get("/popular", async (c) => {
 
 // GET /quizzes/meta
 route.get("/meta", async (c) => {
-  const rows = await db.select({ category: quizzes.category, level: quizzes.level }).from(quizzes);
+  const rows = await db
+    .select({ category: quizzes.category, level: quizzes.level })
+    .from(quizzes)
+    .where(isNull(quizzes.ownerId));
   const byCategory: Record<string, number> = {};
   const byLevel: Record<string, number> = {};
   for (const r of rows) {
@@ -63,7 +74,7 @@ route.get("/meta", async (c) => {
 // GET /quizzes/:id  (+ questions, tanpa membocorkan correctIndex)
 route.get("/:id", async (c) => {
   const id = c.req.param("id");
-  const quiz = await db.query.quizzes.findFirst({ where: eq(quizzes.id, id) });
+  const quiz = await findVisibleQuiz(id, c.get("userId"));
   if (!quiz) throw notFound("Quiz tidak ditemukan");
 
   const questions = await db
@@ -95,7 +106,7 @@ route.post("/:id/attempts", zValidator("json", submitSchema), async (c) => {
   const id = c.req.param("id");
   const { answers, timeTakenSeconds } = c.req.valid("json");
 
-  const quiz = await db.query.quizzes.findFirst({ where: eq(quizzes.id, id) });
+  const quiz = await findVisibleQuiz(id, userId);
   if (!quiz) throw notFound("Quiz tidak ditemukan");
 
   const questions = await db

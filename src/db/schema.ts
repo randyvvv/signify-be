@@ -124,9 +124,14 @@ export const quizzes = pgTable(
     level: text("level").notNull().default("BEGINNER"), // BEGINNER | INTERMEDIATE | EXPERT
     likesCount: integer("likes_count").notNull().default(0),
     rewardCoins: integer("reward_coins").notNull().default(50),
+    // null = kuis publik; terisi = kuis pribadi (mis. dibuat Signify Coach untuk user ini)
+    ownerId: uuid("owner_id").references(() => users.id, { onDelete: "cascade" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index("quizzes_category_idx").on(t.category)],
+  (t) => [
+    index("quizzes_category_idx").on(t.category),
+    index("quizzes_owner_idx").on(t.ownerId),
+  ],
 );
 
 export const quizQuestions = pgTable(
@@ -389,6 +394,40 @@ export const translatorSessions = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("translator_sessions_user_idx").on(t.userId, t.createdAt)],
+);
+
+/* ------------------------------------------------------------------ */
+/* Signify Coach (AI agent) — riwayat percakapan                       */
+/* ------------------------------------------------------------------ */
+export const agentSessions = pgTable(
+  "agent_sessions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("agent_sessions_user_idx").on(t.userId, t.updatedAt)],
+);
+
+export const agentMessages = pgTable(
+  "agent_messages",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    sessionId: uuid("session_id")
+      .notNull()
+      .references(() => agentSessions.id, { onDelete: "cascade" }),
+    role: text("role").notNull(), // user | assistant
+    content: text("content").notNull(),
+    // langkah tool yang dijalankan agent & kartu hasil (rencana, kuis, dst)
+    steps: jsonb("steps").$type<unknown[]>().notNull().default([]),
+    cards: jsonb("cards").$type<unknown[]>().notNull().default([]),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("agent_messages_session_idx").on(t.sessionId, t.createdAt)],
 );
 
 /* ------------------------------------------------------------------ */

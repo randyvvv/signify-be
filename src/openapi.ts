@@ -25,6 +25,7 @@ export const openApiDocument = {
     { name: "Sign Dictionary" },
     { name: "Vocabulary" },
     { name: "AI" },
+    { name: "Signify Coach" },
     { name: "System" },
   ],
   components: {
@@ -1788,6 +1789,88 @@ export const openApiDocument = {
               },
             },
           },
+          "401": { $ref: "#/components/responses/Unauthorized" },
+        },
+      },
+    },
+    "/api/agent/chat": {
+      post: {
+        tags: ["Signify Coach"],
+        summary: "Run the Signify Coach AI agent (Server-Sent Events)",
+        description:
+          "Gemini function-calling agent with tools over the learner's data: get_learner_profile, search_materials, get_material_content, get_video_transcript, create_sign_quiz (private quiz owned by the user), add_signs_to_vocabulary, demonstrate_signs, recommend_materials, show_study_plan. Streams events: `session` {sessionId,title} → `step` {step} / `card` {card} (repeated) → `message` {text} → `done`; `error` {message} on failure. Requires AI_ENABLED and GEMINI_API_KEY (503 ai_unavailable otherwise).",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["message"],
+                properties: {
+                  sessionId: { type: "string", format: "uuid", description: "Continue a conversation" },
+                  message: { type: "string", maxLength: 2000 },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "200": { description: "text/event-stream of coach events" },
+          "404": { $ref: "#/components/responses/NotFound" },
+          "503": { description: "AI disabled (ai_unavailable)" },
+          "401": { $ref: "#/components/responses/Unauthorized" },
+        },
+      },
+    },
+    "/api/agent/sessions": {
+      get: {
+        tags: ["Signify Coach"],
+        summary: "List the user's coach conversations",
+        responses: {
+          "200": {
+            description: "OK",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      id: { type: "string", format: "uuid" },
+                      title: { type: "string" },
+                      updatedAt: { type: "string", format: "date-time" },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          "401": { $ref: "#/components/responses/Unauthorized" },
+        },
+      },
+    },
+    "/api/agent/sessions/{id}": {
+      get: {
+        tags: ["Signify Coach"],
+        summary: "Conversation with messages, tool steps and result cards",
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        ],
+        responses: {
+          "200": { description: "OK" },
+          "404": { $ref: "#/components/responses/NotFound" },
+          "401": { $ref: "#/components/responses/Unauthorized" },
+        },
+      },
+      delete: {
+        tags: ["Signify Coach"],
+        summary: "Delete a conversation",
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        ],
+        responses: {
+          "200": { description: "OK" },
+          "404": { $ref: "#/components/responses/NotFound" },
           "401": { $ref: "#/components/responses/Unauthorized" },
         },
       },

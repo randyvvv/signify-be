@@ -25,7 +25,7 @@ const RECENT_MESSAGE_LIMIT = 10;
 
 let geminiClient: GoogleGenAI | null = null;
 
-function getGeminiClient(): GoogleGenAI {
+export function getGeminiClient(): GoogleGenAI {
   if (!env.GEMINI_API_KEY) {
     throw serviceUnavailable(
       "GEMINI_API_KEY belum dikonfigurasi",

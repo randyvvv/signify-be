@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { and, asc, desc, eq, gte, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, isNull, sql } from "drizzle-orm";
 import { db } from "../db/index.js";
 import {
   users,
@@ -86,7 +86,8 @@ route.get("/", async (c) => {
   // daily quiz: rotasi deterministik per tanggal UTC.
   const [quizCountRow] = await db
     .select({ total: sql<number>`count(*)` })
-    .from(quizzes);
+    .from(quizzes)
+    .where(isNull(quizzes.ownerId));
   const dailyQuizOffset = getDailyQuizOffset(Number(quizCountRow?.total ?? 0));
   const [dailyQuiz] =
     dailyQuizOffset === null
@@ -94,6 +95,7 @@ route.get("/", async (c) => {
       : await db
           .select()
           .from(quizzes)
+          .where(isNull(quizzes.ownerId))
           .orderBy(asc(quizzes.createdAt))
           .limit(1)
           .offset(dailyQuizOffset);
