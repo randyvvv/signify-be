@@ -5,7 +5,7 @@ import { normalizeWord } from "./sign-translate.js";
 import type { Executor } from "./executor.js";
 
 export type Rating = "again" | "hard" | "good" | "easy";
-export type VocabularySource = "practice" | "quiz" | "translator" | "manual";
+export type VocabularySource = "practice" | "quiz" | "translator" | "manual" | "coach";
 
 export interface CardState {
   repetitions: number;
@@ -76,6 +76,7 @@ export async function getSignLanguage(exec: Executor, userId: string): Promise<s
 /**
  * Tambahkan kata ke kosakata user (kata yang sudah ada dibiarkan).
  * Kata baru langsung jatuh tempo hari ini supaya bisa segera direview.
+ * Mengembalikan jumlah kata yang benar-benar baru ditambahkan.
  */
 export async function addVocabulary(
   exec: Executor,
@@ -83,14 +84,16 @@ export async function addVocabulary(
   words: string[],
   source: VocabularySource,
   signedLanguage?: string,
-): Promise<void> {
+): Promise<number> {
   const unique = [...new Set(words.map(normalizeWord).filter(Boolean))];
-  if (unique.length === 0) return;
+  if (unique.length === 0) return 0;
   const lang = signedLanguage ?? (await getSignLanguage(exec, userId));
   const today = todayStr();
 
-  await exec
+  const inserted = await exec
     .insert(userVocabulary)
     .values(unique.map((word) => ({ userId, word, signedLanguage: lang, source, dueDate: today })))
-    .onConflictDoNothing();
+    .onConflictDoNothing()
+    .returning({ id: userVocabulary.id });
+  return inserted.length;
 }

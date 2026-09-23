@@ -19,6 +19,7 @@ import chat from "./routes/chat.js";
 import translator from "./routes/translator.js";
 import signs from "./routes/signs.js";
 import vocabulary from "./routes/vocabulary.js";
+import agent from "./routes/agent.js";
 
 const app = new Hono();
 
@@ -52,6 +53,7 @@ api.route("/chat", chat);
 api.route("/translator", translator);
 api.route("/signs", signs);
 api.route("/vocabulary", vocabulary);
+api.route("/agent", agent);
 
 app.route("/api", api);
 

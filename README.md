@@ -174,6 +174,30 @@ Gated by `AI_ENABLED` (default `false`). The chatbot also requires
 | GET | `/api/translator/sessions` | list the user's sessions |
 | GET | `/api/translator/sessions/:id` | session detail |
 
+### Signify Coach (AI agent)
+An agent built on Gemini function calling (`src/services/agent`). Given a goal
+("help me prepare for a job interview", a YouTube link, "what should I practice?")
+it plans and acts with tools over the learner's real data, then answers briefly:
+
+| Tool | What it does |
+|---|---|
+| `get_learner_profile` | streak, coins, goals, vocabulary stats + weakest signs, low-scoring practice words, materials in progress |
+| `search_materials` / `get_material_content` | search the library / read a material's text |
+| `get_video_transcript` | captions of a YouTube link the learner shares |
+| `create_sign_quiz` | creates a **private** quiz (`quizzes.owner_id`) where the avatar signs each term |
+| `add_signs_to_vocabulary` | adds words to My Signs (spaced repetition) |
+| `demonstrate_signs` / `recommend_materials` / `show_study_plan` | result cards the frontend renders |
+
+The loop (`runner.ts`, max 8 model turns) streams every tool step and card to the
+client. Requires `AI_ENABLED=true` and `GEMINI_API_KEY`.
+
+| Method | Path | Description |
+|---|---|---|
+| POST | `/api/agent/chat` | `{ message, sessionId? }` → SSE: `session`, `step`, `card`, `message`, `done` / `error` |
+| GET | `/api/agent/sessions` | the user's conversations |
+| GET | `/api/agent/sessions/:id` | messages with their tool steps and cards |
+| DELETE | `/api/agent/sessions/:id` | delete a conversation |
+
 ## Sign language model
 The sign language recognition model this backend integrates with lives in a
 separate repo: **[AlthariqFairuz/signify-model](https://github.com/AlthariqFairuz/signify-model)**.
