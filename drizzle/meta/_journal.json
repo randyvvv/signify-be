@@ -29,6 +29,13 @@
       "when": 1782896400000,
       "tag": "0003_material_content_pages",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1790179758746,
+      "tag": "0004_sign_learning_features",
+      "breakpoints": true
     }
   ]
 }

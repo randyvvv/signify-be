@@ -13,6 +13,7 @@ import {
 import { badRequest, notFound } from "../lib/errors.js";
 import { addCoins } from "../services/coins.js";
 import { recordActivity } from "../services/activity.js";
+import { addVocabulary } from "../services/vocabulary.js";
 import { requireAuth, type AuthVariables } from "../middleware/auth.js";
 
 const route = new Hono<{ Variables: AuthVariables }>();
@@ -160,6 +161,13 @@ route.post("/:id/attempts", zValidator("json", submitSchema), async (c) => {
     }
 
     await addCoins(tx, userId, pointsEarned);
+    // Istilah dari soal isyarat masuk ke kosakata pribadi (untuk spaced repetition).
+    await addVocabulary(
+      tx,
+      userId,
+      graded.filter((g) => g.type !== "text" && g.term).map((g) => g.term!),
+      "quiz",
+    );
     await recordActivity(tx, userId, {
       type: "quiz",
       referenceId: id,

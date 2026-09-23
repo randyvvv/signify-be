@@ -59,6 +59,8 @@ export const userPreferences = pgTable("user_preferences", {
   soundEffects: boolean("sound_effects").notNull().default(true),
   autoplay: boolean("autoplay").notNull().default(false),
   language: text("language").notNull().default("en"),
+  // bahasa isyarat untuk avatar (kode ISO 639-3: ase = ASL, ins = Indonesian SL)
+  signLanguage: text("sign_language").notNull().default("ase"),
 
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
@@ -135,7 +137,7 @@ export const quizQuestions = pgTable(
       .notNull()
       .references(() => quizzes.id, { onDelete: "cascade" }),
     ordering: integer("ordering").notNull().default(0),
-    type: text("type").notNull(), // text | image
+    type: text("type").notNull(), // text | image | sign (avatar memperagakan `term`)
     question: text("question").notNull(),
     promptImageUrl: text("prompt_image_url"), // utk type 'text': gambar isyarat
     term: text("term"), // utk type 'image': kata yang ditanyakan
@@ -235,9 +237,84 @@ export const signPracticeSessions = pgTable(
     completedCount: integer("completed_count").notNull().default(0),
     totalCount: integer("total_count").notNull().default(0),
     accuracy: integer("accuracy").notNull().default(0),
+    pointsEarned: integer("points_earned").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("sign_practice_user_idx").on(t.userId)],
+);
+
+// Skor per kata dalam satu sesi latihan (hasil pencocokan landmark di FE).
+export const signPracticeAttempts = pgTable(
+  "sign_practice_attempts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    sessionId: uuid("session_id")
+      .notNull()
+      .references(() => signPracticeSessions.id, { onDelete: "cascade" }),
+    word: text("word").notNull(),
+    score: integer("score").notNull(), // 0..100
+    passed: boolean("passed").notNull(),
+  },
+  (t) => [index("sign_practice_attempts_session_idx").on(t.sessionId)],
+);
+
+/* ------------------------------------------------------------------ */
+/* Kamus isyarat (pose kustom per bahasa isyarat, mis. BISINDO)        */
+/* ------------------------------------------------------------------ */
+export const signDictionary = pgTable(
+  "sign_dictionary",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    word: text("word").notNull(), // dinormalisasi: lowercase, spasi tunggal
+    signedLanguage: text("signed_language").notNull(), // ase | ins | ...
+    pose: text("pose").notNull(), // file .pose dalam base64
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("sign_dictionary_word_lang_unique").on(t.word, t.signedLanguage)],
+);
+
+// Cache hasil SignGPT supaya teks yang sama tidak diterjemahkan berulang.
+export const poseCache = pgTable(
+  "pose_cache",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    text: text("text").notNull(),
+    signedLanguage: text("signed_language").notNull(),
+    spokenLanguage: text("spoken_language").notNull(),
+    pose: text("pose").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("pose_cache_key_unique").on(t.text, t.signedLanguage, t.spokenLanguage),
+  ],
+);
+
+/* ------------------------------------------------------------------ */
+/* Kosakata pribadi + spaced repetition (SM-2)                         */
+/* ------------------------------------------------------------------ */
+export const userVocabulary = pgTable(
+  "user_vocabulary",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    word: text("word").notNull(),
+    signedLanguage: text("signed_language").notNull().default("ase"),
+    source: text("source").notNull(), // practice | quiz | translator | manual
+    repetitions: integer("repetitions").notNull().default(0),
+    intervalDays: integer("interval_days").notNull().default(0),
+    ease: integer("ease").notNull().default(250), // ease factor x100
+    lapses: integer("lapses").notNull().default(0),
+    dueDate: date("due_date").notNull(),
+    lastReviewedAt: timestamp("last_reviewed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("user_vocabulary_unique").on(t.userId, t.word, t.signedLanguage),
+    index("user_vocabulary_due_idx").on(t.userId, t.dueDate),
+  ],
 );
 
 /* ------------------------------------------------------------------ */
@@ -250,7 +327,7 @@ export const activities = pgTable(
     userId: uuid("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    type: text("type").notNull(), // material | quiz | practice
+    type: text("type").notNull(), // material | quiz | practice | review
     referenceId: uuid("reference_id"),
     title: text("title").notNull(),
     durationSeconds: integer("duration_seconds").notNull().default(0),
@@ -324,3 +401,4 @@ export type Quiz = typeof quizzes.$inferSelect;
 export type ShopItem = typeof shopItems.$inferSelect;
 export type ChatSession = typeof chatSessions.$inferSelect;
 export type ChatMessage = typeof chatMessages.$inferSelect;
+export type UserVocabulary = typeof userVocabulary.$inferSelect;

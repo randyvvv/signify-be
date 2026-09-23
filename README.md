@@ -33,8 +33,11 @@ pnpm db:studio       # open Drizzle Studio
   the SQL files in `drizzle/` and does **not** introspect the DB. Prefer it over
   `drizzle-kit push`, which can crash introspecting a Supabase database on
   drizzle-kit 0.30.x.
-- `db:seed` is idempotent (skips if data already exists). Re-seed from scratch with
-  `SEED_RESET=true pnpm db:seed`. It creates a demo login: **demo@signify.app / password123**.
+- `db:seed` is idempotent: on a database that already has data it only adds
+  seed data introduced later (currently the "Guess the Sign" quiz). Re-seed from
+  scratch with `SEED_RESET=true pnpm db:seed` (PowerShell:
+  `$env:SEED_RESET="true"; pnpm db:seed`). This also deletes the users' quiz
+  attempts, purchased items, material progress and chats through cascades. It creates a demo login: **demo@signify.app / password123**.
 
 ## Run
 
@@ -128,8 +131,29 @@ Everything lives under `/api`. All routes except `/auth/*` require the header `A
 | Method | Path | Description |
 |---|---|---|
 | GET | `/api/sign-practice/categories` | list of scenarios |
-| POST | `/api/sign-practice/sessions` | save practice results |
+| POST | `/api/sign-practice/sessions` | save practice results; with `attempts: [{ word, score }]` each word scoring ≥ 60 earns 5 coins and all words go to the vocabulary |
 | GET | `/api/sign-practice` | aggregated progress |
+
+### Sign dictionary
+Custom `.pose` clips per word and sign language (e.g. BISINDO). They take priority
+over SignGPT in `/api/translator/pose`. Writing is limited to `ADMIN_EMAILS`.
+| Method | Path | Description |
+|---|---|---|
+| GET | `/api/signs/languages` | available sign languages (`ase`, `ins`) + `canEdit` |
+| GET | `/api/signs?lang=&search=` | list entries (without pose data) |
+| POST | `/api/signs` | `{ word, signedLanguage, pose }` (base64 `.pose`) → add/replace (admin) |
+| DELETE | `/api/signs/:id` | delete an entry (admin) |
+
+### Vocabulary (spaced repetition)
+Words from sign practice, sign quizzes and the translator are collected per user and
+scheduled with SM-2. The user's sign language comes from `PUT /api/me/preferences { signLanguage }`.
+| Method | Path | Description |
+|---|---|---|
+| GET | `/api/vocabulary?lang=` | all words + `{ total, due, mastered, learning }` |
+| GET | `/api/vocabulary/due?limit=` | cards due today |
+| POST | `/api/vocabulary` | `{ word, source? }` → save a word |
+| DELETE | `/api/vocabulary/:id` | remove a word |
+| POST | `/api/vocabulary/reviews` | `{ reviews: [{ id, rating: again\|hard\|good\|easy }], durationSeconds }` → reschedule, +1 coin/card (max 20), counts toward the streak |
 
 ### Leaderboard
 | Method | Path | Description |
@@ -144,6 +168,8 @@ Gated by `AI_ENABLED` (default `false`). The chatbot also requires
 | GET | `/api/chat?materialId=` | saved material chat history for the authenticated user |
 | POST | `/api/chat` | material-grounded Signify chatbot using Gemini; `503 ai_unavailable` when disabled |
 | POST | `/api/translator/transcript` | `{ url, lang? }` → fetch YouTube captions (`{ cues, source }`) that power the Live Translator |
+| POST | `/api/translator/pose` | `{ text, signedLanguage?, spokenLanguage? }` → `{ clips: [{ text, source, pose }], missing }`; sign dictionary first, then SignGPT (cached, only for `SIGNGPT_LANGUAGES`) |
+| POST | `/api/translator/recognize` | `{ frames: T×59×3, fps? }` → `{ text, confidence }` via the signify-model server at `SIGN_MODEL_URL`; `503 model_unavailable` when unset |
 | POST | `/api/translator/sessions` | register a livestream URL and persist it for the user |
 | GET | `/api/translator/sessions` | list the user's sessions |
 | GET | `/api/translator/sessions/:id` | session detail |
@@ -151,3 +177,15 @@ Gated by `AI_ENABLED` (default `false`). The chatbot also requires
 ## Sign language model
 The sign language recognition model this backend integrates with lives in a
 separate repo: **[AlthariqFairuz/signify-model](https://github.com/AlthariqFairuz/signify-model)**.
+
+`POST /api/translator/recognize` forwards keypoints to an inference server that
+wraps that model. The server is not part of this repo; it must accept
+
+```json
+POST <SIGN_MODEL_URL>
+{ "keypoints": [[[x, y, z], ... 59 points], ... frames], "fps": 25 }
+```
+
+where each frame holds 17 MediaPipe pose landmarks (indices 0–16), then 21 left-hand
+and 21 right-hand landmarks (zeros when a hand is not visible), and answer
+`{ "text": "...", "confidence": 0.87 }`.

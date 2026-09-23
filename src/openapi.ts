@@ -22,6 +22,8 @@ export const openApiDocument = {
     { name: "Shop" },
     { name: "Sign Practice" },
     { name: "Leaderboard" },
+    { name: "Sign Dictionary" },
+    { name: "Vocabulary" },
     { name: "AI" },
     { name: "System" },
   ],
@@ -95,6 +97,11 @@ export const openApiDocument = {
           soundEffects: { type: "boolean" },
           autoplay: { type: "boolean" },
           language: { type: "string" },
+          signLanguage: {
+            type: "string",
+            enum: ["ase", "ins"],
+            description: "Sign language for the avatar (ase = ASL, ins = BISINDO)",
+          },
           updatedAt: { type: "string", format: "date-time" },
         },
       },
@@ -155,7 +162,11 @@ export const openApiDocument = {
           id: { type: "string", format: "uuid" },
           quizId: { type: "string", format: "uuid" },
           ordering: { type: "integer" },
-          type: { type: "string", enum: ["text", "image"] },
+          type: {
+            type: "string",
+            enum: ["text", "image", "sign"],
+            description: "'sign': the avatar performs `term`, options are text labels",
+          },
           question: { type: "string" },
           promptImageUrl: {
             type: "string",
@@ -268,6 +279,30 @@ export const openApiDocument = {
           title: { type: "string" },
           durationSeconds: { type: "integer" },
           createdAt: { type: "string", format: "date-time" },
+        },
+      },
+      SignDictionaryEntry: {
+        type: "object",
+        properties: {
+          id: { type: "string", format: "uuid" },
+          word: { type: "string" },
+          signedLanguage: { type: "string" },
+          createdAt: { type: "string", format: "date-time" },
+        },
+      },
+      VocabularyItem: {
+        type: "object",
+        properties: {
+          id: { type: "string", format: "uuid" },
+          word: { type: "string" },
+          signedLanguage: { type: "string" },
+          source: { type: "string", enum: ["practice", "quiz", "translator", "manual"] },
+          repetitions: { type: "integer" },
+          intervalDays: { type: "integer" },
+          ease: { type: "integer", description: "Ease factor x100" },
+          lapses: { type: "integer" },
+          dueDate: { type: "string", format: "date" },
+          lastReviewedAt: { type: "string", format: "date-time", nullable: true },
         },
       },
       TranslatorSession: {
@@ -505,6 +540,7 @@ export const openApiDocument = {
                   soundEffects: { type: "boolean" },
                   autoplay: { type: "boolean" },
                   language: { type: "string" },
+                  signLanguage: { type: "string", enum: ["ase", "ins"] },
                 },
               },
             },
@@ -1158,10 +1194,23 @@ export const openApiDocument = {
             "application/json": {
               schema: {
                 type: "object",
-                required: ["category", "completedCount", "totalCount", "accuracy"],
+                required: ["category"],
+                description:
+                  "When `attempts` is sent, completedCount/accuracy are derived from it; each attempt with score >= 60 passes and earns 5 coins, and the words are added to the user's vocabulary.",
                 properties: {
                   category: { type: "string" },
                   goalWord: { type: "string" },
+                  attempts: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      required: ["word", "score"],
+                      properties: {
+                        word: { type: "string" },
+                        score: { type: "integer", minimum: 0, maximum: 100 },
+                      },
+                    },
+                  },
                   completedCount: { type: "integer", minimum: 0 },
                   totalCount: { type: "integer", minimum: 0 },
                   accuracy: { type: "integer", minimum: 0, maximum: 100 },
@@ -1373,6 +1422,372 @@ export const openApiDocument = {
             },
           },
           "404": { $ref: "#/components/responses/NotFound" },
+          "401": { $ref: "#/components/responses/Unauthorized" },
+        },
+      },
+    },
+    "/api/translator/pose": {
+      post: {
+        tags: ["AI"],
+        summary: "Text -> sign language pose clips",
+        description:
+          "Looks up words/phrases in the local sign dictionary first, then falls back to SignGPT (cached) for languages listed in SIGNGPT_LANGUAGES. signedLanguage defaults to the user's preference.",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["text"],
+                properties: {
+                  text: { type: "string", maxLength: 500 },
+                  signedLanguage: { type: "string", enum: ["ase", "ins"] },
+                  spokenLanguage: { type: "string", default: "en" },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "OK",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    signedLanguage: { type: "string" },
+                    clips: {
+                      type: "array",
+                      items: {
+                        type: "object",
+                        properties: {
+                          text: { type: "string" },
+                          source: { type: "string", enum: ["dictionary", "signgpt"] },
+                          pose: { type: "string", description: "Base64 .pose file" },
+                        },
+                      },
+                    },
+                    missing: { type: "array", items: { type: "string" } },
+                  },
+                },
+              },
+            },
+          },
+          "404": { description: "No sign available for this text (code no_sign_available)" },
+          "503": { description: "SignGPT failed (code signgpt_failed)" },
+          "401": { $ref: "#/components/responses/Unauthorized" },
+        },
+      },
+    },
+    "/api/translator/recognize": {
+      post: {
+        tags: ["AI"],
+        summary: "Sign -> text (signify-model)",
+        description:
+          "Forwards MediaPipe keypoints (frames x 59 x 3: 17 pose + 21 left hand + 21 right hand) to the signify-model inference server at SIGN_MODEL_URL, which must answer { text, confidence? }.",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["frames"],
+                properties: {
+                  frames: {
+                    type: "array",
+                    minItems: 8,
+                    maxItems: 900,
+                    items: { type: "array", items: { type: "array", items: { type: "number" } } },
+                  },
+                  fps: { type: "number" },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "OK",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    text: { type: "string" },
+                    confidence: { type: "number", nullable: true },
+                  },
+                },
+              },
+            },
+          },
+          "503": {
+            description: "Model not configured (model_unavailable) or failed (model_request_failed)",
+          },
+          "401": { $ref: "#/components/responses/Unauthorized" },
+        },
+      },
+    },
+    "/api/signs/languages": {
+      get: {
+        tags: ["Sign Dictionary"],
+        summary: "Available sign languages and whether the user can edit the dictionary",
+        responses: {
+          "200": {
+            description: "OK",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    languages: {
+                      type: "array",
+                      items: {
+                        type: "object",
+                        properties: {
+                          code: { type: "string" },
+                          name: { type: "string" },
+                          signGpt: { type: "boolean" },
+                        },
+                      },
+                    },
+                    canEdit: { type: "boolean" },
+                  },
+                },
+              },
+            },
+          },
+          "401": { $ref: "#/components/responses/Unauthorized" },
+        },
+      },
+    },
+    "/api/signs": {
+      get: {
+        tags: ["Sign Dictionary"],
+        summary: "List dictionary entries (without pose data)",
+        parameters: [
+          { name: "lang", in: "query", schema: { type: "string" } },
+          { name: "search", in: "query", schema: { type: "string" } },
+        ],
+        responses: {
+          "200": {
+            description: "OK",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "array",
+                  items: { $ref: "#/components/schemas/SignDictionaryEntry" },
+                },
+              },
+            },
+          },
+          "401": { $ref: "#/components/responses/Unauthorized" },
+        },
+      },
+      post: {
+        tags: ["Sign Dictionary"],
+        summary: "Add or replace the pose for a word (admin, see ADMIN_EMAILS)",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["word", "signedLanguage", "pose"],
+                properties: {
+                  word: { type: "string" },
+                  signedLanguage: { type: "string", enum: ["ase", "ins"] },
+                  pose: { type: "string", description: "Base64 .pose file (v0.1/v0.2)" },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "201": {
+            description: "Created",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/SignDictionaryEntry" },
+              },
+            },
+          },
+          "400": { description: "Invalid word or pose file" },
+          "403": { description: "Not an admin" },
+          "401": { $ref: "#/components/responses/Unauthorized" },
+        },
+      },
+    },
+    "/api/signs/{id}": {
+      delete: {
+        tags: ["Sign Dictionary"],
+        summary: "Delete a dictionary entry (admin)",
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        ],
+        responses: {
+          "200": { description: "OK" },
+          "403": { description: "Not an admin" },
+          "404": { $ref: "#/components/responses/NotFound" },
+          "401": { $ref: "#/components/responses/Unauthorized" },
+        },
+      },
+    },
+    "/api/vocabulary": {
+      get: {
+        tags: ["Vocabulary"],
+        summary: "Personal vocabulary + stats for the user's sign language",
+        parameters: [{ name: "lang", in: "query", schema: { type: "string" } }],
+        responses: {
+          "200": {
+            description: "OK",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    signedLanguage: { type: "string" },
+                    stats: {
+                      type: "object",
+                      properties: {
+                        total: { type: "integer" },
+                        due: { type: "integer" },
+                        mastered: { type: "integer" },
+                        learning: { type: "integer" },
+                      },
+                    },
+                    items: {
+                      type: "array",
+                      items: { $ref: "#/components/schemas/VocabularyItem" },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          "401": { $ref: "#/components/responses/Unauthorized" },
+        },
+      },
+      post: {
+        tags: ["Vocabulary"],
+        summary: "Save a word to the personal vocabulary (no-op if it already exists)",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["word"],
+                properties: {
+                  word: { type: "string" },
+                  source: {
+                    type: "string",
+                    enum: ["practice", "quiz", "translator", "manual"],
+                    default: "manual",
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "201": {
+            description: "Created",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/VocabularyItem" },
+              },
+            },
+          },
+          "401": { $ref: "#/components/responses/Unauthorized" },
+        },
+      },
+    },
+    "/api/vocabulary/due": {
+      get: {
+        tags: ["Vocabulary"],
+        summary: "Cards due for review today",
+        parameters: [{ name: "limit", in: "query", schema: { type: "integer", default: 20 } }],
+        responses: {
+          "200": {
+            description: "OK",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "array",
+                  items: { $ref: "#/components/schemas/VocabularyItem" },
+                },
+              },
+            },
+          },
+          "401": { $ref: "#/components/responses/Unauthorized" },
+        },
+      },
+    },
+    "/api/vocabulary/{id}": {
+      delete: {
+        tags: ["Vocabulary"],
+        summary: "Remove a word from the personal vocabulary",
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        ],
+        responses: {
+          "200": { description: "OK" },
+          "404": { $ref: "#/components/responses/NotFound" },
+          "401": { $ref: "#/components/responses/Unauthorized" },
+        },
+      },
+    },
+    "/api/vocabulary/reviews": {
+      post: {
+        tags: ["Vocabulary"],
+        summary: "Submit a review session",
+        description:
+          "Applies SM-2 scheduling per card, awards 1 coin per reviewed card (max 20) and records a 'review' activity (counts toward the streak).",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["reviews"],
+                properties: {
+                  reviews: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      required: ["id", "rating"],
+                      properties: {
+                        id: { type: "string", format: "uuid" },
+                        rating: { type: "string", enum: ["again", "hard", "good", "easy"] },
+                      },
+                    },
+                  },
+                  durationSeconds: { type: "integer", minimum: 0 },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "OK",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    reviewed: { type: "integer" },
+                    coinsEarned: { type: "integer" },
+                    items: {
+                      type: "array",
+                      items: { $ref: "#/components/schemas/VocabularyItem" },
+                    },
+                  },
+                },
+              },
+            },
+          },
           "401": { $ref: "#/components/responses/Unauthorized" },
         },
       },
