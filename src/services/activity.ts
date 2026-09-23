@@ -30,7 +30,7 @@ export function nextStreak(
 }
 
 export interface ActivityInput {
-  type: "material" | "quiz" | "practice";
+  type: "material" | "quiz" | "practice" | "review";
   title: string;
   referenceId?: string | null;
   durationSeconds?: number;

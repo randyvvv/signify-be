@@ -8,6 +8,7 @@ import { hashPassword, verifyPassword } from "../lib/auth.js";
 import { publicUser } from "../lib/user.js";
 import { badRequest, notFound, unauthorized } from "../lib/errors.js";
 import { requireAuth, type AuthVariables } from "../middleware/auth.js";
+import { SIGN_LANGUAGE_CODES } from "../services/sign-translate.js";
 
 const profile = new Hono<{ Variables: AuthVariables }>();
 profile.use("*", requireAuth);
@@ -77,6 +78,7 @@ const prefsSchema = z.object({
   soundEffects: z.boolean().optional(),
   autoplay: z.boolean().optional(),
   language: z.string().optional(),
+  signLanguage: z.enum(SIGN_LANGUAGE_CODES).optional(),
 });
 
 // PUT /me/preferences  (onboarding + settings)

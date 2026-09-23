@@ -26,6 +26,8 @@ async function seed() {
   const count = Number(rows[0]?.count ?? 0);
 
   if (count > 0 && !reset) {
+    // Data yang ditambahkan belakangan tetap diisi tanpa menghapus data lama.
+    await seedSignQuiz();
     console.log(
       "Sudah ada data — seed dilewati. Pakai SEED_RESET=true untuk reset & seed ulang.",
     );
@@ -968,6 +970,8 @@ The card is not a replacement for trained staff, but it improves the first momen
     await db.insert(quizQuestions).values(questionsToInsert as any[]);
   }
 
+  await seedSignQuiz();
+
   // ---- Demo user (idempoten by email) ----
   const existingUser = await db.query.users.findFirst({
     where: eq(users.email, DEMO_EMAIL),
@@ -993,6 +997,65 @@ The card is not a replacement for trained staff, but it improves the first momen
 
   console.log("Seed selesai ✅");
   process.exit(0);
+}
+
+// Acak urutan (Fisher–Yates).
+function shuffleWords<T>(array: T[]): T[] {
+  const arr = [...array];
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j]!, arr[i]!];
+  }
+  return arr;
+}
+
+/**
+ * Quiz "Guess the Sign": avatar memperagakan `term`, user memilih artinya.
+ * Idempoten (by title) — aman dijalankan di database yang sudah berisi data.
+ */
+async function seedSignQuiz() {
+  const existing = await db.query.quizzes.findFirst({
+    where: eq(quizzes.title, "Guess the Sign"),
+  });
+  if (existing) return;
+
+  const SIGN_WORDS = [
+    "Hello", "Thank You", "Yes", "No", "Please", "Sorry",
+    "Good", "Love", "Friend", "Family", "Help", "Eat",
+  ];
+  const [signQuiz] = await db
+    .insert(quizzes)
+    .values({
+      title: "Guess the Sign",
+      description: "Watch the avatar sign a word, then pick what it means.",
+      category: "Sign Language",
+      level: "BEGINNER",
+      likesCount: 320,
+      rewardCoins: 60,
+      thumbnailUrl: "/quizzes-thumb/quiz-sign-language.jpg",
+    })
+    .returning();
+
+  await db.insert(quizQuestions).values(
+    shuffleWords(SIGN_WORDS)
+      .slice(0, 8)
+      .map((term, i) => {
+        const options = shuffleWords([
+          term,
+          ...shuffleWords(SIGN_WORDS.filter((w) => w !== term)).slice(0, 3),
+        ]);
+        return {
+          quizId: signQuiz!.id,
+          ordering: i + 1,
+          type: "sign",
+          question: "What does the avatar sign?",
+          term,
+          options,
+          correctIndex: options.indexOf(term),
+        };
+      }),
+  );
+  console.log('Quiz "Guess the Sign" ditambahkan');
 }
 
 seed().catch((err) => {

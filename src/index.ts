@@ -17,6 +17,8 @@ import dashboard from "./routes/dashboard.js";
 import leaderboard from "./routes/leaderboard.js";
 import chat from "./routes/chat.js";
 import translator from "./routes/translator.js";
+import signs from "./routes/signs.js";
+import vocabulary from "./routes/vocabulary.js";
 
 const app = new Hono();
 
@@ -48,6 +50,8 @@ api.route("/dashboard", dashboard);
 api.route("/leaderboard", leaderboard);
 api.route("/chat", chat);
 api.route("/translator", translator);
+api.route("/signs", signs);
+api.route("/vocabulary", vocabulary);
 
 app.route("/api", api);
 

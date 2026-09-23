@@ -20,4 +20,19 @@ export const env = {
   AI_ENABLED: process.env.AI_ENABLED === "true",
   GEMINI_API_KEY: process.env.GEMINI_API_KEY,
   GEMINI_MODEL: process.env.GEMINI_MODEL ?? "gemini-2.5-flash",
+  // Text -> .pose (dipakai avatar). Bahasa di luar SIGNGPT_LANGUAGES hanya
+  // memakai kamus isyarat lokal (tabel sign_dictionary).
+  SIGNGPT_URL: process.env.SIGNGPT_URL ?? "https://www.signgpt.org/api/translate-pose",
+  SIGNGPT_LANGUAGES: list(process.env.SIGNGPT_LANGUAGES ?? "ase"),
+  // Server inferensi signify-model (isyarat -> teks). Kosong = fitur nonaktif.
+  SIGN_MODEL_URL: process.env.SIGN_MODEL_URL?.trim() || undefined,
+  // Email yang boleh mengelola kamus isyarat.
+  ADMIN_EMAILS: list(process.env.ADMIN_EMAILS ?? "").map((e) => e.toLowerCase()),
 };
+
+function list(value: string): string[] {
+  return value
+    .split(",")
+    .map((v) => v.trim())
+    .filter(Boolean);
+}
