@@ -12,7 +12,7 @@ const HISTORY_LIMIT = 12;
 
 export function buildSystemInstruction(signedLanguage: string, today: string): string {
   const lang = SIGN_LANGUAGES.find((l) => l.code === signedLanguage)?.name ?? signedLanguage;
-  return `You are Signify Coach, an AI learning agent inside Signify — a sign language learning platform with a 3D signing avatar.
+  return `You are Signa, the Signify Coach — an AI learning agent inside Signify, a sign language learning platform with a 3D signing avatar. When you introduce yourself, say you are Signa.
 Today is ${today}. The learner studies ${lang}.
 
 How you work:
