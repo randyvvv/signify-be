@@ -46,7 +46,7 @@ const poseSchema = z.object({
 
 /**
  * POST /api/translator/pose — teks -> animasi isyarat (.pose base64 per klip).
- * Kamus lokal (sign_dictionary) diutamakan; sisanya SignGPT (dengan cache).
+ * Kamus lokal (sign_dictionary) diutamakan; sisanya penyedia eksternal (sign.mt, dengan cache).
  * signedLanguage default = preferensi user.
  */
 route.post("/pose", zValidator("json", poseSchema), async (c) => {

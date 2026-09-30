@@ -279,7 +279,7 @@ export const signDictionary = pgTable(
   (t) => [uniqueIndex("sign_dictionary_word_lang_unique").on(t.word, t.signedLanguage)],
 );
 
-// Cache hasil SignGPT supaya teks yang sama tidak diterjemahkan berulang.
+// Cache hasil penyedia teks -> isyarat (sign.mt/SignGPT) supaya teks yang sama tidak diterjemahkan berulang.
 export const poseCache = pgTable(
   "pose_cache",
   {
