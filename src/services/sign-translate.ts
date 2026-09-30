@@ -4,7 +4,7 @@ import { poseCache, signDictionary } from "../db/schema.js";
 import { env } from "../lib/env.js";
 import { serviceUnavailable } from "../lib/errors.js";
 
-/** Bahasa isyarat yang bisa dipilih user (dukungan SignGPT diatur SIGNGPT_LANGUAGES). */
+/** Bahasa isyarat yang bisa dipilih user (dukungan penyedia eksternal diatur POSE_API_LANGUAGES). */
 export const SIGN_LANGUAGES = [
   { code: "ase", name: "American Sign Language (ASL)" },
   { code: "ins", name: "Indonesian Sign Language (BISINDO)" },
@@ -16,8 +16,17 @@ export const SIGN_LANGUAGE_CODES = SIGN_LANGUAGES.map((l) => l.code) as [
   ...SignLanguageCode[],
 ];
 
-export function isSignGptLanguage(code: string): boolean {
-  return env.SIGNGPT_LANGUAGES.includes(code);
+export type PoseProvider = "signmt" | "signgpt";
+
+/** Nama penyedia teks -> isyarat untuk ditampilkan ke user. */
+export const POSE_PROVIDER_LABEL: Record<PoseProvider, string> = {
+  signmt: "sign.mt",
+  signgpt: "SignGPT",
+};
+
+/** Apakah bahasa isyarat ini diterjemahkan penyedia eksternal (selain kamus lokal)? */
+export function isExternalPoseLanguage(code: string): boolean {
+  return env.POSE_API_LANGUAGES.includes(code);
 }
 
 /** Normalisasi kata/frasa untuk kunci kamus: lowercase, tanpa tanda baca, spasi tunggal. */
@@ -30,7 +39,7 @@ export function normalizeWord(value: string): string {
 }
 
 export interface PlannedSegment {
-  /** Teks asli segmen (dipakai untuk SignGPT / label). */
+  /** Teks asli segmen (dipakai untuk penyedia eksternal / label). */
   text: string;
   /** Kunci kamus bila segmen ini ada di kamus, selain itu null. */
   dictionaryKey: string | null;
@@ -39,7 +48,7 @@ export interface PlannedSegment {
 /**
  * Pecah teks jadi segmen: frasa terpanjang (maks `maxPhrase` kata) yang ada di
  * kamus diambil dari kamus; kata-kata di antaranya digabung jadi satu segmen
- * untuk SignGPT. Fungsi murni (mudah dites).
+ * untuk penyedia eksternal. Fungsi murni (mudah dites).
  */
 export function planSegments(
   text: string,
@@ -91,11 +100,64 @@ export function candidateKeys(text: string, maxPhrase = 4): string[] {
   return [...out];
 }
 
-async function signGptPose(
+export interface ExternalPoseRequest {
+  provider: PoseProvider;
+  url: string;
+  text: string;
+  signedLanguage: string;
+  spokenLanguage: string;
+  fetchImpl?: typeof fetch;
+}
+
+/**
+ * Ambil file .pose (base64) dari penyedia eksternal.
+ * - sign.mt : GET ?text=&spoken=&signed= -> biner application/pose
+ * - SignGPT : POST JSON -> { pose: base64 }
+ * Mengembalikan null bila penyedia tidak punya isyarat untuk teks ini
+ * (mis. sign.mt "No poses found"); melempar error untuk gangguan lain.
+ */
+export async function fetchExternalPose(req: ExternalPoseRequest): Promise<string | null> {
+  const doFetch = req.fetchImpl ?? fetch;
+  const signal = AbortSignal.timeout(30_000);
+
+  if (req.provider === "signmt") {
+    const url = new URL(req.url);
+    url.searchParams.set("text", req.text);
+    url.searchParams.set("spoken", req.spokenLanguage);
+    url.searchParams.set("signed", req.signedLanguage);
+    const res = await doFetch(url, { signal });
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      if (/no poses found/i.test(body)) return null;
+      throw new Error(`sign.mt ${res.status}`);
+    }
+    const pose = Buffer.from(await res.arrayBuffer()).toString("base64");
+    if (!isValidPoseBase64(pose)) throw new Error("sign.mt mengembalikan file .pose tidak valid");
+    return pose;
+  }
+
+  const res = await doFetch(req.url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      signedLanguage: req.signedLanguage,
+      spokenLanguage: req.spokenLanguage,
+      text: req.text,
+    }),
+    signal,
+  });
+  if (!res.ok) throw new Error(`SignGPT ${res.status}`);
+  const data = (await res.json()) as { pose?: string };
+  if (!data.pose) throw new Error("SignGPT tidak mengembalikan pose");
+  return data.pose;
+}
+
+/** Pose dari penyedia eksternal aktif, dengan cache di tabel pose_cache. */
+async function externalPose(
   text: string,
   signedLanguage: string,
   spokenLanguage: string,
-): Promise<string> {
+): Promise<string | null> {
   const cacheKey = text.trim();
   const cached = await db.query.poseCache.findFirst({
     where: and(
@@ -106,37 +168,37 @@ async function signGptPose(
   });
   if (cached) return cached.pose;
 
-  const res = await fetch(env.SIGNGPT_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ signedLanguage, spokenLanguage, text: cacheKey }),
-    signal: AbortSignal.timeout(30_000),
+  const provider = env.POSE_PROVIDER;
+  const pose = await fetchExternalPose({
+    provider,
+    url: provider === "signmt" ? env.SIGN_MT_URL : env.SIGNGPT_URL,
+    text: cacheKey,
+    signedLanguage,
+    spokenLanguage,
   });
-  if (!res.ok) throw new Error(`SignGPT ${res.status}`);
-  const data = (await res.json()) as { pose?: string };
-  if (!data.pose) throw new Error("SignGPT tidak mengembalikan pose");
+  if (!pose) return null;
 
   await db
     .insert(poseCache)
-    .values({ text: cacheKey, signedLanguage, spokenLanguage, pose: data.pose })
+    .values({ text: cacheKey, signedLanguage, spokenLanguage, pose })
     .onConflictDoNothing();
-  return data.pose;
+  return pose;
 }
 
 export interface PoseClipResult {
   text: string;
-  source: "dictionary" | "signgpt";
+  source: "dictionary" | PoseProvider;
   /** File .pose dalam base64. */
   pose: string;
 }
 
 export interface TranslateResult {
   clips: PoseClipResult[];
-  /** Segmen yang tidak bisa diterjemahkan (tak ada di kamus & bahasa tak didukung SignGPT). */
+  /** Segmen yang tidak bisa diterjemahkan (tak ada di kamus & tak tersedia di penyedia eksternal). */
   missing: string[];
 }
 
-/** Teks -> daftar klip pose berurutan (kamus lokal dulu, sisanya SignGPT). */
+/** Teks -> daftar klip pose berurutan (kamus lokal dulu, sisanya penyedia eksternal). */
 export async function translateTextToPose(
   text: string,
   signedLanguage: string,
@@ -156,12 +218,12 @@ export async function translateTextToPose(
     : [];
   const dict = new Map(entries.map((e) => [e.word, e.pose]));
 
-  // Tanpa entri kamus: kirim teks utuh ke SignGPT (tetap dengan tanda baca).
+  // Tanpa entri kamus: kirim teks utuh ke penyedia eksternal (tetap dengan tanda baca).
   const segments: PlannedSegment[] = dict.size
     ? planSegments(text, (k) => dict.has(k))
     : [{ text: text.trim(), dictionaryKey: null }];
 
-  const useSignGpt = isSignGptLanguage(signedLanguage);
+  const useExternal = isExternalPoseLanguage(signedLanguage);
   const clips: PoseClipResult[] = [];
   const missing: string[] = [];
   let lastError: unknown;
@@ -171,13 +233,14 @@ export async function translateTextToPose(
       clips.push({ text: seg.text, source: "dictionary", pose: dict.get(seg.dictionaryKey)! });
       continue;
     }
-    if (!useSignGpt) {
+    if (!useExternal) {
       missing.push(seg.text);
       continue;
     }
     try {
-      const pose = await signGptPose(seg.text, signedLanguage, spokenLanguage);
-      clips.push({ text: seg.text, source: "signgpt", pose });
+      const pose = await externalPose(seg.text, signedLanguage, spokenLanguage);
+      if (pose) clips.push({ text: seg.text, source: env.POSE_PROVIDER, pose });
+      else missing.push(seg.text);
     } catch (err) {
       lastError = err;
       missing.push(seg.text);
@@ -186,7 +249,10 @@ export async function translateTextToPose(
 
   if (clips.length === 0 && lastError) {
     console.error("[translate-pose]", lastError);
-    throw serviceUnavailable("Gagal memanggil SignGPT", "signgpt_failed");
+    throw serviceUnavailable(
+      `Gagal memanggil layanan terjemahan isyarat (${POSE_PROVIDER_LABEL[env.POSE_PROVIDER]})`,
+      "pose_provider_failed",
+    );
   }
   return { clips, missing };
 }

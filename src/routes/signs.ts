@@ -10,7 +10,8 @@ import { requireAuth, type AuthVariables } from "../middleware/auth.js";
 import {
   SIGN_LANGUAGES,
   SIGN_LANGUAGE_CODES,
-  isSignGptLanguage,
+  POSE_PROVIDER_LABEL,
+  isExternalPoseLanguage,
   isValidPoseBase64,
   normalizeWord,
 } from "../services/sign-translate.js";
@@ -26,7 +27,9 @@ const isAdmin = (email: string) => env.ADMIN_EMAILS.includes(email.toLowerCase()
 // GET /signs/languages -> bahasa isyarat yang tersedia + izin edit kamus
 route.get("/languages", (c) =>
   c.json({
-    languages: SIGN_LANGUAGES.map((l) => ({ ...l, signGpt: isSignGptLanguage(l.code) })),
+    // external = kata di luar kamus diterjemahkan penyedia eksternal (provider).
+    languages: SIGN_LANGUAGES.map((l) => ({ ...l, external: isExternalPoseLanguage(l.code) })),
+    provider: POSE_PROVIDER_LABEL[env.POSE_PROVIDER],
     canEdit: isAdmin(c.get("email")),
   }),
 );

@@ -136,7 +136,7 @@ Everything lives under `/api`. All routes except `/auth/*` require the header `A
 
 ### Sign dictionary
 Custom `.pose` clips per word and sign language (e.g. BISINDO). They take priority
-over SignGPT in `/api/translator/pose`. Writing is limited to `ADMIN_EMAILS`.
+over the external provider (sign.mt) in `/api/translator/pose`. Writing is limited to `ADMIN_EMAILS`.
 | Method | Path | Description |
 |---|---|---|
 | GET | `/api/signs/languages` | available sign languages (`ase`, `ins`) + `canEdit` |
@@ -168,7 +168,7 @@ Gated by `AI_ENABLED` (default `false`). The chatbot also requires
 | GET | `/api/chat?materialId=` | saved material chat history for the authenticated user |
 | POST | `/api/chat` | material-grounded Signify chatbot using Gemini; `503 ai_unavailable` when disabled |
 | POST | `/api/translator/transcript` | `{ url, lang? }` → fetch YouTube captions (`{ cues, source }`) that power the Live Translator |
-| POST | `/api/translator/pose` | `{ text, signedLanguage?, spokenLanguage? }` → `{ clips: [{ text, source, pose }], missing }`; sign dictionary first, then SignGPT (cached, only for `SIGNGPT_LANGUAGES`) |
+| POST | `/api/translator/pose` | `{ text, signedLanguage?, spokenLanguage? }` → `{ clips: [{ text, source, pose }], missing }`; sign dictionary first, then the provider from `POSE_PROVIDER` (default sign.mt, cached, only for `POSE_API_LANGUAGES`) |
 | POST | `/api/translator/recognize` | `{ frames: T×59×3, fps? }` → `{ text, confidence }` via the signify-model server at `SIGN_MODEL_URL`; `503 model_unavailable` when unset |
 | POST | `/api/translator/sessions` | register a livestream URL and persist it for the user |
 | GET | `/api/translator/sessions` | list the user's sessions |

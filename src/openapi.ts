@@ -1432,7 +1432,7 @@ export const openApiDocument = {
         tags: ["AI"],
         summary: "Text -> sign language pose clips",
         description:
-          "Looks up words/phrases in the local sign dictionary first, then falls back to SignGPT (cached) for languages listed in SIGNGPT_LANGUAGES. signedLanguage defaults to the user's preference.",
+          "Looks up words/phrases in the local sign dictionary first, then falls back to the external provider set by POSE_PROVIDER (default sign.mt, cached) for languages listed in POSE_API_LANGUAGES. Segments the provider has no sign for are returned in `missing`. signedLanguage defaults to the user's preference.",
         requestBody: {
           required: true,
           content: {
@@ -1464,7 +1464,7 @@ export const openApiDocument = {
                         type: "object",
                         properties: {
                           text: { type: "string" },
-                          source: { type: "string", enum: ["dictionary", "signgpt"] },
+                          source: { type: "string", enum: ["dictionary", "signmt", "signgpt"] },
                           pose: { type: "string", description: "Base64 .pose file" },
                         },
                       },
@@ -1476,7 +1476,7 @@ export const openApiDocument = {
             },
           },
           "404": { description: "No sign available for this text (code no_sign_available)" },
-          "503": { description: "SignGPT failed (code signgpt_failed)" },
+          "503": { description: "External pose provider failed (code pose_provider_failed)" },
           "401": { $ref: "#/components/responses/Unauthorized" },
         },
       },
@@ -1548,10 +1548,11 @@ export const openApiDocument = {
                         properties: {
                           code: { type: "string" },
                           name: { type: "string" },
-                          signGpt: { type: "boolean" },
+                          external: { type: "boolean", description: "Words outside the dictionary are translated by the external provider" },
                         },
                       },
                     },
+                    provider: { type: "string", example: "sign.mt", description: "Name of the active external pose provider" },
                     canEdit: { type: "boolean" },
                   },
                 },
