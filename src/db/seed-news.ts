@@ -48,7 +48,7 @@ Signify is built by eight people:
 
 ## Thank you to our sponsors
 
-We thank **Indonesia AI Institute**, our main sponsor, together with **AI Center ITB** and **Telkom Indonesia** for supporting Signify.
+We thank **Indonesia AI Institute**, **AI Center ITB** and **Telkom Indonesia** for supporting Signify.
 
 ## Try Signify
 
