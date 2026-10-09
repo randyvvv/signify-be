@@ -26,6 +26,7 @@ export const openApiDocument = {
     { name: "Vocabulary" },
     { name: "AI" },
     { name: "Signify Coach" },
+    { name: "News" },
     { name: "System" },
   ],
   components: {
@@ -333,6 +334,63 @@ export const openApiDocument = {
           avatarUrl: { type: "string", nullable: true },
           coins: { type: "integer" },
           streakCount: { type: "integer" },
+        },
+      },
+      NewsFact: {
+        type: "object",
+        required: ["label", "value"],
+        properties: {
+          label: { type: "string", example: "Venue" },
+          value: { type: "string", example: "Vrije Universiteit Amsterdam, the Netherlands" },
+          href: { type: "string", format: "uri" },
+        },
+      },
+      NewsSummary: {
+        type: "object",
+        properties: {
+          id: { type: "string", format: "uuid" },
+          slug: { type: "string" },
+          title: { type: "string" },
+          excerpt: { type: "string" },
+          coverImageUrl: {
+            type: "string",
+            nullable: true,
+            description: "Absolute URL or a path to a frontend asset (e.g. /news/<slug>/cover.jpg)",
+          },
+          category: { type: "string" },
+          authorName: { type: "string" },
+          publishedAt: { type: "string", format: "date-time" },
+          readingMinutes: { type: "integer" },
+        },
+      },
+      NewsDetail: {
+        allOf: [
+          { $ref: "#/components/schemas/NewsSummary" },
+          {
+            type: "object",
+            properties: {
+              content: { type: "string", description: "Markdown" },
+              facts: { type: "array", items: { $ref: "#/components/schemas/NewsFact" } },
+              published: { type: "boolean" },
+              updatedAt: { type: "string", format: "date-time" },
+            },
+          },
+        ],
+      },
+      NewsInput: {
+        type: "object",
+        required: ["title", "excerpt", "content"],
+        properties: {
+          title: { type: "string" },
+          slug: { type: "string", description: "Defaults to a slug of the title" },
+          excerpt: { type: "string" },
+          content: { type: "string", description: "Markdown" },
+          coverImageUrl: { type: "string", nullable: true },
+          category: { type: "string", default: "News" },
+          authorName: { type: "string", default: "Signify Team" },
+          facts: { type: "array", items: { $ref: "#/components/schemas/NewsFact" } },
+          published: { type: "boolean", default: true },
+          publishedAt: { type: "string", format: "date-time" },
         },
       },
     },
@@ -1906,6 +1964,124 @@ export const openApiDocument = {
             },
           },
           "401": { $ref: "#/components/responses/Unauthorized" },
+        },
+      },
+    },
+    "/api/news": {
+      get: {
+        tags: ["News"],
+        summary: "Published news, newest first (public)",
+        security: [],
+        parameters: [
+          { name: "category", in: "query", schema: { type: "string" } },
+          {
+            name: "exclude",
+            in: "query",
+            schema: { type: "string" },
+            description: "Slug to leave out (e.g. the article being read)",
+          },
+          { name: "page", in: "query", schema: { type: "integer", default: 1 } },
+          { name: "limit", in: "query", schema: { type: "integer", default: 9, maximum: 30 } },
+        ],
+        responses: {
+          "200": {
+            description: "OK",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    items: { type: "array", items: { $ref: "#/components/schemas/NewsSummary" } },
+                    page: { type: "integer" },
+                    limit: { type: "integer" },
+                    total: { type: "integer" },
+                    totalPages: { type: "integer" },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      post: {
+        tags: ["News"],
+        summary: "Create a news article (admin, see ADMIN_EMAILS)",
+        requestBody: {
+          required: true,
+          content: { "application/json": { schema: { $ref: "#/components/schemas/NewsInput" } } },
+        },
+        responses: {
+          "201": {
+            description: "Created",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/NewsDetail" } } },
+          },
+          "400": { $ref: "#/components/responses/BadRequest" },
+          "401": { $ref: "#/components/responses/Unauthorized" },
+          "403": { description: "Not an admin" },
+          "409": { description: "Slug already used" },
+        },
+      },
+    },
+    "/api/news/{key}": {
+      get: {
+        tags: ["News"],
+        summary: "Published article by slug (public)",
+        security: [],
+        parameters: [
+          { name: "key", in: "path", required: true, schema: { type: "string" }, description: "Article slug" },
+        ],
+        responses: {
+          "200": {
+            description: "OK",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/NewsDetail" } } },
+          },
+          "404": { $ref: "#/components/responses/NotFound" },
+        },
+      },
+      patch: {
+        tags: ["News"],
+        summary: "Update fields of an article (admin)",
+        parameters: [
+          {
+            name: "key",
+            in: "path",
+            required: true,
+            schema: { type: "string", format: "uuid" },
+            description: "Article id",
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: { "application/json": { schema: { $ref: "#/components/schemas/NewsInput" } } },
+        },
+        responses: {
+          "200": {
+            description: "OK",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/NewsDetail" } } },
+          },
+          "401": { $ref: "#/components/responses/Unauthorized" },
+          "403": { description: "Not an admin" },
+          "404": { $ref: "#/components/responses/NotFound" },
+          "409": { description: "Slug already used" },
+        },
+      },
+      delete: {
+        tags: ["News"],
+        summary: "Delete an article (admin)",
+        parameters: [
+          {
+            name: "key",
+            in: "path",
+            required: true,
+            schema: { type: "string", format: "uuid" },
+            description: "Article id",
+          },
+        ],
+        responses: {
+          "200": { description: "OK" },
+          "401": { $ref: "#/components/responses/Unauthorized" },
+          "403": { description: "Not an admin" },
+          "404": { $ref: "#/components/responses/NotFound" },
         },
       },
     },

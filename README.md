@@ -34,7 +34,8 @@ pnpm db:studio       # open Drizzle Studio
   `drizzle-kit push`, which can crash introspecting a Supabase database on
   drizzle-kit 0.30.x.
 - `db:seed` is idempotent: on a database that already has data it only adds
-  seed data introduced later (currently the "Guess the Sign" quiz). Re-seed from
+  seed data introduced later (currently the "Guess the Sign" quiz and the first
+  news article, see `src/db/seed-news.ts`). Re-seed from
   scratch with `SEED_RESET=true pnpm db:seed` (PowerShell:
   `$env:SEED_RESET="true"; pnpm db:seed`). This also deletes the users' quiz
   attempts, purchased items, material progress and chats through cascades. It creates a demo login: **demo@signify.app / password123**.
@@ -159,6 +160,18 @@ scheduled with SM-2. The user's sign language comes from `PUT /api/me/preference
 | Method | Path | Description |
 |---|---|---|
 | GET | `/api/leaderboard?limit=` | ranking by coins (`{ entries, me }`) |
+
+### News
+Public articles for the landing page (`/news` on the frontend). Reading needs no
+token; writing is limited to `ADMIN_EMAILS`. `content` is Markdown; `coverImageUrl`
+can be an absolute URL or a path to a frontend asset (`/news/<slug>/cover.jpg`).
+| Method | Path | Description |
+|---|---|---|
+| GET | `/api/news?category=&exclude=&page=&limit=` | published articles, newest first (without `content`) |
+| GET | `/api/news/:slug` | published article + `content`, `facts` (`[{ label, value, href? }]`) |
+| POST | `/api/news` | `{ title, excerpt, content, slug?, coverImageUrl?, category?, authorName?, facts?, published?, publishedAt? }` (admin) |
+| PATCH | `/api/news/:id` | update any of those fields (admin) |
+| DELETE | `/api/news/:id` | delete an article (admin) |
 
 ### AI
 Gated by `AI_ENABLED` (default `false`). The chatbot also requires

@@ -9,6 +9,7 @@ import {
   quizQuestions,
 } from "./schema.js";
 import { hashPassword } from "../lib/auth.js";
+import { seedNews } from "./seed-news.js";
 
 const DEMO_EMAIL = "demo@signify.app";
 const DEMO_PASSWORD = "password123";
@@ -28,6 +29,7 @@ async function seed() {
   if (count > 0 && !reset) {
     // Data yang ditambahkan belakangan tetap diisi tanpa menghapus data lama.
     await seedSignQuiz();
+    await seedNews();
     console.log(
       "Sudah ada data — seed dilewati. Pakai SEED_RESET=true untuk reset & seed ulang.",
     );
@@ -971,6 +973,7 @@ The card is not a replacement for trained staff, but it improves the first momen
   }
 
   await seedSignQuiz();
+  await seedNews();
 
   // ---- Demo user (idempoten by email) ----
   const existingUser = await db.query.users.findFirst({

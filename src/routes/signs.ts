@@ -5,6 +5,7 @@ import { and, asc, eq, ilike } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { signDictionary } from "../db/schema.js";
 import { env } from "../lib/env.js";
+import { isAdmin } from "../lib/admin.js";
 import { badRequest, forbidden, notFound } from "../lib/errors.js";
 import { requireAuth, type AuthVariables } from "../middleware/auth.js";
 import {
@@ -21,8 +22,6 @@ route.use("*", requireAuth);
 
 // Batas ukuran file .pose (base64) yang boleh diunggah: ~3 MB.
 const MAX_POSE_LENGTH = 4_000_000;
-
-const isAdmin = (email: string) => env.ADMIN_EMAILS.includes(email.toLowerCase());
 
 // GET /signs/languages -> bahasa isyarat yang tersedia + izin edit kamus
 route.get("/languages", (c) =>

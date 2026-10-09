@@ -431,6 +431,40 @@ export const agentMessages = pgTable(
 );
 
 /* ------------------------------------------------------------------ */
+/* News — berita publik di landing page (/news)                        */
+/* ------------------------------------------------------------------ */
+/** Info ringkas di samping artikel, mis. { label: "Venue", value: "..." }. */
+export interface NewsFact {
+  label: string;
+  value: string;
+  href?: string;
+}
+
+export const news = pgTable(
+  "news",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    slug: text("slug").notNull(),
+    title: text("title").notNull(),
+    excerpt: text("excerpt").notNull(),
+    content: text("content").notNull(), // markdown
+    // URL absolut, atau path relatif ke aset frontend (mis. /news/.../cover.jpg)
+    coverImageUrl: text("cover_image_url"),
+    category: text("category").notNull().default("News"),
+    authorName: text("author_name").notNull().default("Signify Team"),
+    facts: jsonb("facts").$type<NewsFact[]>().notNull().default([]),
+    published: boolean("published").notNull().default(true),
+    publishedAt: timestamp("published_at", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("news_slug_unique").on(t.slug),
+    index("news_published_idx").on(t.published, t.publishedAt),
+  ],
+);
+
+/* ------------------------------------------------------------------ */
 /* Tipe bantu                                                          */
 /* ------------------------------------------------------------------ */
 export type User = typeof users.$inferSelect;
@@ -441,3 +475,4 @@ export type ShopItem = typeof shopItems.$inferSelect;
 export type ChatSession = typeof chatSessions.$inferSelect;
 export type ChatMessage = typeof chatMessages.$inferSelect;
 export type UserVocabulary = typeof userVocabulary.$inferSelect;
+export type News = typeof news.$inferSelect;
