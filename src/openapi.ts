@@ -59,6 +59,11 @@ export const openApiDocument = {
           gender: { type: "string", enum: ["male", "female"], nullable: true },
           bio: { type: "string", nullable: true },
           avatarUrl: { type: "string", nullable: true },
+          hasPassword: {
+            type: "boolean",
+            description: "false = Google-only account (can set a first password via /api/me/password)",
+          },
+          googleLinked: { type: "boolean", description: "Account is linked to a Google account" },
           coins: { type: "integer" },
           streakCount: { type: "integer" },
           lastActiveDate: { type: "string", format: "date", nullable: true },
@@ -454,7 +459,9 @@ export const openApiDocument = {
               },
             },
           },
-          "409": { description: "Email already registered" },
+          "409": {
+            description: "Email already registered (code email_taken), or registered via Google (code google_account)",
+          },
         },
       },
     },
@@ -487,7 +494,56 @@ export const openApiDocument = {
               },
             },
           },
-          "401": { description: "Wrong email or password" },
+          "401": {
+            description: "Wrong email or password (code invalid_credentials), or a Google-only account (code google_account)",
+          },
+        },
+      },
+    },
+    "/api/auth/google": {
+      post: {
+        tags: ["Auth"],
+        summary: "Sign in with Google",
+        description:
+          "Exchanges a Google Identity Services ID token for a Signify JWT. Finds the user by Google account, links an existing account with the same (verified) email, or creates a new user. Requires GOOGLE_CLIENT_ID.",
+        security: [],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["credential"],
+                properties: {
+                  credential: { type: "string", description: "ID token from Google Identity Services" },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "Existing user signed in",
+            content: {
+              "application/json": {
+                schema: {
+                  allOf: [
+                    { $ref: "#/components/schemas/AuthResponse" },
+                    { type: "object", properties: { isNewUser: { type: "boolean" } } },
+                  ],
+                },
+              },
+            },
+          },
+          "201": { description: "New user created (isNewUser = true)" },
+          "401": {
+            description: "Invalid or expired Google token (code invalid_google_token)",
+            content: {
+              "application/json": { schema: { $ref: "#/components/schemas/Error" } },
+            },
+          },
+          "409": { description: "Email is linked to a different Google account (code google_account_mismatch)" },
+          "503": { description: "Google sign-in is not configured (code google_disabled)" },
         },
       },
     },
@@ -622,15 +678,20 @@ export const openApiDocument = {
       post: {
         tags: ["Profile"],
         summary: "Change password",
+        description:
+          "Google-only accounts (hasPassword = false) can set a first password without currentPassword.",
         requestBody: {
           required: true,
           content: {
             "application/json": {
               schema: {
                 type: "object",
-                required: ["currentPassword", "newPassword"],
+                required: ["newPassword"],
                 properties: {
-                  currentPassword: { type: "string" },
+                  currentPassword: {
+                    type: "string",
+                    description: "Required when the account already has a password",
+                  },
                   newPassword: { type: "string", minLength: 6 },
                 },
               },

@@ -101,11 +101,12 @@ profile.put("/preferences", zValidator("json", prefsSchema), async (c) => {
 });
 
 const passwordSchema = z.object({
-  currentPassword: z.string().min(1),
+  // Wajib bila akun sudah punya password; akun Google tanpa password boleh kosong.
+  currentPassword: z.string().optional(),
   newPassword: z.string().min(6),
 });
 
-// POST /me/password  -> ganti password
+// POST /me/password  -> ganti password (atau set password pertama untuk akun Google)
 profile.post("/password", zValidator("json", passwordSchema), async (c) => {
   const userId = c.get("userId");
   const { currentPassword, newPassword } = c.req.valid("json");
@@ -113,11 +114,13 @@ profile.post("/password", zValidator("json", passwordSchema), async (c) => {
   const user = await db.query.users.findFirst({ where: eq(users.id, userId) });
   if (!user) throw notFound("User tidak ditemukan");
 
-  if (!(await verifyPassword(currentPassword, user.passwordHash))) {
-    throw unauthorized("Password lama salah", "invalid_password");
-  }
-  if (await verifyPassword(newPassword, user.passwordHash)) {
-    throw badRequest("Password baru harus berbeda", "password_unchanged");
+  if (user.passwordHash !== null) {
+    if (!currentPassword || !(await verifyPassword(currentPassword, user.passwordHash))) {
+      throw unauthorized("Password lama salah", "invalid_password");
+    }
+    if (await verifyPassword(newPassword, user.passwordHash)) {
+      throw badRequest("Password baru harus berbeda", "password_unchanged");
+    }
   }
 
   const passwordHash = await hashPassword(newPassword);

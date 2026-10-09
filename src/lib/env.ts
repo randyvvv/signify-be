@@ -38,6 +38,9 @@ export const env = {
   SIGN_MODEL_URL: process.env.SIGN_MODEL_URL?.trim() || undefined,
   // Email yang boleh mengelola kamus isyarat.
   ADMIN_EMAILS: list(process.env.ADMIN_EMAILS ?? "").map((e) => e.toLowerCase()),
+  // OAuth Client ID Google untuk "Sign in with Google" (boleh lebih dari satu,
+  // dipisah koma). Kosong = POST /api/auth/google nonaktif.
+  GOOGLE_CLIENT_IDS: list(process.env.GOOGLE_CLIENT_ID ?? ""),
 };
 
 function list(value: string): string[] {

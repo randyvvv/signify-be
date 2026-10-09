@@ -20,7 +20,10 @@ export const users = pgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     email: text("email").notNull(),
-    passwordHash: text("password_hash").notNull(),
+    // null = akun hanya bisa login lewat Google (belum pernah set password).
+    passwordHash: text("password_hash"),
+    // ID akun Google ("sub" di ID token); null = belum terhubung ke Google.
+    googleSub: text("google_sub"),
 
     // profil
     fullName: text("full_name"),
@@ -37,7 +40,10 @@ export const users = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [uniqueIndex("users_email_unique").on(t.email)],
+  (t) => [
+    uniqueIndex("users_email_unique").on(t.email),
+    uniqueIndex("users_google_sub_unique").on(t.googleSub),
+  ],
 );
 
 /* ------------------------------------------------------------------ */

@@ -1,9 +1,12 @@
 import type { users } from "../db/schema.js";
 
-/** Buang field sensitif (password_hash) sebelum dikirim ke client. */
+/**
+ * Buang field sensitif (password_hash, google_sub) sebelum dikirim ke client.
+ * `hasPassword` dipakai UI untuk menampilkan "Set password" pada akun Google.
+ */
 export function publicUser(u: typeof users.$inferSelect) {
-  const { passwordHash, ...rest } = u;
-  return rest;
+  const { passwordHash, googleSub, ...rest } = u;
+  return { ...rest, hasPassword: passwordHash !== null, googleLinked: googleSub !== null };
 }
 
 export type PublicUser = ReturnType<typeof publicUser>;

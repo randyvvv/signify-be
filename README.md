@@ -88,7 +88,16 @@ Everything lives under `/api`. All routes except `/auth/*` require the header `A
 |---|---|---|
 | POST | `/api/auth/register` | `{ email, password, fullName? }` → `{ token, user }` |
 | POST | `/api/auth/login` | `{ email, password }` → `{ token, user }` |
+| POST | `/api/auth/google` | `{ credential }` (Google ID token) → `{ token, user, isNewUser }` |
 | GET | `/api/auth/session` | verify token |
+
+**Sign in with Google.** The frontend shows the Google Identity Services button and
+sends its ID token to `/api/auth/google`. The API verifies it against Google's public
+keys and `GOOGLE_CLIENT_ID`, then signs in the user with that Google account, links an
+existing account with the same email, or creates a new one. Google-only accounts have
+no password (`user.hasPassword = false`) and can set one through `POST /api/me/password`
+without `currentPassword`. Without `GOOGLE_CLIENT_ID` the endpoint returns 503
+`google_disabled`.
 
 ### Profile & preferences
 | Method | Path | Description |

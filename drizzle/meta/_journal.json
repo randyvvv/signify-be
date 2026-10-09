@@ -50,6 +50,13 @@
       "when": 1791533901450,
       "tag": "0006_news",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1791560598316,
+      "tag": "0007_google_sso",
+      "breakpoints": true
     }
   ]
 }
