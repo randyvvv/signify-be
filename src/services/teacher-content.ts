@@ -84,38 +84,21 @@ export function parseGeneratedMaterial(raw: string): GeneratedMaterial {
   return parsed;
 }
 
-const RESPONSE_SCHEMA = {
-  type: "object",
-  properties: {
-    title: { type: "string", description: "Short title of the lesson (max 120 characters)" },
-    description: { type: "string", description: "One or two sentence summary (max 300 characters)" },
-    sections: {
-      type: "array",
-      description: "2-6 Markdown sections, each starting with a '## ' heading",
-      items: { type: "string" },
-    },
-    quiz: {
-      type: "array",
-      description: "5 multiple-choice questions about the lesson",
-      items: {
-        type: "object",
-        properties: {
-          question: { type: "string" },
-          options: { type: "array", items: { type: "string" }, description: "Exactly 4 distinct options" },
-          correctIndex: { type: "integer", description: "Index (0-3) of the correct option" },
-        },
-        required: ["question", "options", "correctIndex"],
-      },
-    },
-  },
-  required: ["title", "description", "sections", "quiz"],
-};
+// Bentuk JSON dijelaskan di prompt (bukan responseJsonSchema: di Vertex schema membuat
+// respons lambat sekali) lalu divalidasi parseGeneratedMaterial.
+const RESPONSE_FORMAT = `Respond with JSON only, in this shape:
+{
+  "title": "short lesson title (max 120 characters)",
+  "description": "one or two sentence summary (max 300 characters)",
+  "sections": ["## First heading, then the Markdown text of the section", "## Second heading ..."],
+  "quiz": [{ "question": "...", "options": ["...", "...", "...", "..."], "correctIndex": 0 }]
+}`;
 
 const LANGUAGE_NAMES: Record<string, string> = { en: "English", id: "Indonesian (Bahasa Indonesia)" };
 
 /**
  * Transkrip Kelas Live -> artikel belajar yang aksesibel untuk murid Tuli
- * (kalimat jelas, berstruktur) + kuis pilihan ganda, lewat Gemini (JSON terstruktur).
+ * (kalimat jelas, berstruktur) + kuis pilihan ganda, lewat Gemini (JSON).
  */
 export async function generateMaterialFromTranscript(input: {
   classTitle: string;
@@ -132,6 +115,8 @@ Rules:
 - Organize the article into 2-6 sections. Each section is Markdown and starts with a "## " heading; use bullet lists where they help.
 - Write 5 multiple-choice questions that check understanding of the article. Each has exactly 4 distinct options and one correct answer.
 
+${RESPONSE_FORMAT}
+
 Class title: ${input.classTitle}
 
 Transcript:
@@ -144,7 +129,6 @@ ${input.transcript.join("\n")}`;
       temperature: 0.3,
       maxOutputTokens: 8192,
       responseMimeType: "application/json",
-      responseJsonSchema: RESPONSE_SCHEMA,
     },
   });
   const raw = response.text;

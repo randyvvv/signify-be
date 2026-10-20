@@ -299,6 +299,8 @@ export interface RolePlayTurn {
 }
 
 const MAX_REPLIES = 3;
+// Latensi Vertex kadang melonjak; lewat batas ini giliran memakai skrip supaya latihan tidak macet.
+const TURN_TIMEOUT_MS = 12_000;
 const MAX_GLOSS_WORDS = 3;
 
 const learnerTurns = (history: RolePlayMessage[]) => history.filter((m) => m.from === "learner").length;
@@ -341,8 +343,10 @@ Each learner message is what they signed. A practice score from 0 to 100 may be 
 Reply in character with ONE short line (at most 25 words) that reacts to what the learner said and moves the conversation toward the goal. Use simple everyday words.
 ${
   final
-    ? `This is the last turn: close the conversation politely in character, return an empty "replies" list, and write "summary": two short sentences telling the learner what they did well and one thing to practice next.`
-    : `Do not end the conversation yet. Suggest exactly ${MAX_REPLIES} different things the learner could answer next in "replies". Each has "text", a short natural reply (at most 6 words), and "gloss", the 1 to ${MAX_GLOSS_WORDS} key signs for it as uppercase ${language} words (for example "COFFEE PLEASE"), using only common words.`
+    ? `This is the last turn: close the conversation politely in character, return an empty "replies" list, and write "summary": two short sentences telling the learner what they did well and one thing to practice next.
+Respond with JSON only: {"line": "...", "replies": [], "summary": "..."}`
+    : `Do not end the conversation yet. Suggest exactly ${MAX_REPLIES} different things the learner could answer next in "replies". Each has "text", a short natural reply (at most 6 words), and "gloss", the 1 to ${MAX_GLOSS_WORDS} key signs for it as uppercase ${language} words (for example "COFFEE PLEASE"), using only common words.
+Respond with JSON only: {"line": "...", "replies": [{"text": "...", "gloss": "..."}]}`
 }
 Stay in character, keep it appropriate for students, and never mention being an AI model.`;
 }
@@ -356,23 +360,6 @@ function transcript(history: RolePlayMessage[]) {
     )
     .join("\n");
 }
-
-const TURN_SCHEMA = {
-  type: "object",
-  properties: {
-    line: { type: "string" },
-    replies: {
-      type: "array",
-      items: {
-        type: "object",
-        properties: { text: { type: "string" }, gloss: { type: "string" } },
-        required: ["text", "gloss"],
-      },
-    },
-    summary: { type: "string" },
-  },
-  required: ["line", "replies"],
-};
 
 const geminiTurnSchema = z.object({
   line: z.string().trim().min(1).max(400),
@@ -441,9 +428,11 @@ export async function nextTurn(
         systemInstruction: instruction(scenario, lang, final),
         temperature: 0.8,
         maxOutputTokens: 1024,
+        // Tanpa responseJsonSchema: di Vertex schema membuat respons lambat sekali
+        // (puluhan detik). Bentuk JSON ada di instruksi dan divalidasi parseGeminiTurn.
         responseMimeType: "application/json",
-        responseJsonSchema: TURN_SCHEMA,
         thinkingConfig: minimalThinking(),
+        httpOptions: { timeout: TURN_TIMEOUT_MS },
       },
     });
     return parseGeminiTurn(response.text, scenario, lang, turnsTaken);

@@ -215,7 +215,11 @@ Broadcasting runs over the WebSocket `GET /api/live/ws`:
 
 ### AI
 Gated by `AI_ENABLED` (default `false`). The chatbot also requires
-`GEMINI_API_KEY` and uses `GEMINI_MODEL` (default `gemini-3.5-flash`).
+`GEMINI_API_KEY` and uses `GEMINI_MODEL` (default `gemini-3.5-flash`). Gemini runs on
+Vertex AI by default (`GEMINI_VERTEX`, an API key bound to a service account with the
+Vertex AI User role); Live Class transcription on Vertex also needs `VERTEX_PROJECT`
+(and optionally `VERTEX_LOCATION`, default `global`). Set `GEMINI_VERTEX=false` for a
+Google AI Studio key.
 | Method | Path | Description |
 |---|---|---|
 | GET | `/api/chat?materialId=` | saved material chat history for the authenticated user |

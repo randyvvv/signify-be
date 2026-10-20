@@ -14,6 +14,9 @@ export type SpeechVoice = keyof typeof SPEECH_VOICES;
 
 export const MAX_SPEECH_CHARS = 500;
 const DEFAULT_SAMPLE_RATE = 24_000;
+// Batas tunggu Gemini; lewat dari ini frontend memakai suara browser / teks apa adanya.
+const TTS_TIMEOUT_MS = 20_000;
+const SENTENCE_TIMEOUT_MS = 12_000;
 
 export function normalizeSpeechText(text: string): string {
   return text.replace(/\s+/g, " ").trim();
@@ -81,6 +84,7 @@ async function generateSpeech(text: string, voice: SpeechVoice): Promise<Buffer>
       config: {
         responseModalities: [Modality.AUDIO],
         speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: SPEECH_VOICES[voice] } } },
+        httpOptions: { timeout: TTS_TIMEOUT_MS },
       },
     });
   } catch (err) {
@@ -156,6 +160,7 @@ export async function composeSentence(text: string, lang: SpeechLanguage): Promi
         temperature: 0.2,
         maxOutputTokens: 256,
         thinkingConfig: minimalThinking(),
+        httpOptions: { timeout: SENTENCE_TIMEOUT_MS },
       },
     });
     return cleanSentence(response.text, text);

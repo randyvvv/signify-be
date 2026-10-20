@@ -33,6 +33,18 @@ type ServerContent = NonNullable<LiveServerMessage["serverContent"]> & {
  * durasi, jadi bila putus di tengah siaran tersambung ulang otomatis; audio yang
  * masuk selama itu ditahan dulu (maks. 5 detik).
  */
+/**
+ * Nama model untuk Live API. Vertex dengan API key tidak tahu project-nya, jadi
+ * modelnya harus ditulis lengkap (projects/<p>/locations/<l>/publishers/google/models/<m>).
+ */
+export function liveModelName(
+  model: string,
+  vertex: { enabled: boolean; project?: string; location: string },
+): string {
+  if (!vertex.enabled || !vertex.project || model.startsWith("projects/")) return model;
+  return `projects/${vertex.project}/locations/${vertex.location}/publishers/google/models/${model}`;
+}
+
 export class GeminiTranscriber {
   private session: Session | null = null;
   private connecting: Promise<void> | null = null;
@@ -106,12 +118,19 @@ export class GeminiTranscriber {
       setTimeout(() => reject(new Error("Gemini tidak mengirim setupComplete")), SETUP_TIMEOUT_MS);
     });
     const session = await getGeminiClient().live.connect({
-      model: env.LIVE_TRANSCRIBE_MODEL,
+      model: liveModelName(env.LIVE_TRANSCRIBE_MODEL, {
+        enabled: env.GEMINI_VERTEX,
+        project: env.VERTEX_PROJECT,
+        location: env.VERTEX_LOCATION,
+      }),
       config: {
         responseModalities: [Modality.TEXT],
-        inputAudioTranscription: languageCode
-          ? { languageHints: { languageCodes: [languageCode] } }
-          : {},
+        // Vertex masih memakai languageCodes; Gemini API (AI Studio) memakai languageHints.
+        inputAudioTranscription: !languageCode
+          ? {}
+          : env.GEMINI_VERTEX
+            ? { languageCodes: [languageCode] }
+            : { languageHints: { languageCodes: [languageCode] } },
       },
       callbacks: {
         onmessage: (message) => this.onMessage(message),

@@ -19,6 +19,13 @@ export const env = {
   // Aktifkan fitur AI (chatbot/translator). Model belum ada, jadi default false.
   AI_ENABLED: process.env.AI_ENABLED === "true",
   GEMINI_API_KEY: process.env.GEMINI_API_KEY,
+  // Gemini lewat Vertex AI (memakai kredit Google Cloud) dengan API key yang terikat
+  // service account. "false" = Gemini API di AI Studio.
+  GEMINI_VERTEX: process.env.GEMINI_VERTEX?.trim() !== "false",
+  // Project Google Cloud (ID atau nomor) & lokasi Vertex. Live API Vertex (transkripsi
+  // Kelas Live) butuh nama model lengkap projects/.../locations/... saat memakai API key.
+  VERTEX_PROJECT: process.env.VERTEX_PROJECT?.trim() || undefined,
+  VERTEX_LOCATION: process.env.VERTEX_LOCATION?.trim() || "global",
   // Gemini 2.5 sudah tidak tersedia untuk project baru, jadi default ke seri 3.
   GEMINI_MODEL: process.env.GEMINI_MODEL ?? "gemini-3.5-flash",
   // Model Gemini Live untuk transkripsi suara guru di Kelas Live.

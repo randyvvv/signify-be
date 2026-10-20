@@ -37,7 +37,7 @@ export function getGeminiClient(): GoogleGenAI {
       "ai_unavailable",
     );
   }
-  geminiClient ??= new GoogleGenAI({ apiKey: env.GEMINI_API_KEY });
+  geminiClient ??= new GoogleGenAI({ vertexai: env.GEMINI_VERTEX, apiKey: env.GEMINI_API_KEY });
   return geminiClient;
 }
 
