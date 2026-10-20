@@ -24,6 +24,8 @@ export const users = pgTable(
     passwordHash: text("password_hash"),
     // ID akun Google ("sub" di ID token); null = belum terhubung ke Google.
     googleSub: text("google_sub"),
+    // 'learner' | 'teacher' (guru bisa membuat Kelas Live).
+    role: text("role").notNull().default("learner"),
 
     // profil
     fullName: text("full_name"),
@@ -471,6 +473,51 @@ export const news = pgTable(
 );
 
 /* ------------------------------------------------------------------ */
+/* Kelas Live: guru berbicara -> subtitle + avatar isyarat ke murid     */
+/* ------------------------------------------------------------------ */
+export const liveClasses = pgTable(
+  "live_classes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    // Kode gabung 6 karakter (tanpa huruf/angka yang mirip), dibagikan guru ke murid.
+    code: text("code").notNull(),
+    teacherId: uuid("teacher_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    spokenLanguage: text("spoken_language").notNull().default("en"),
+    signedLanguage: text("signed_language").notNull().default("ase"),
+    // 'waiting' (belum mulai) | 'live' | 'ended'
+    status: text("status").notNull().default("waiting"),
+    startedAt: timestamp("started_at", { withTimezone: true }),
+    endedAt: timestamp("ended_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("live_classes_code_unique").on(t.code),
+    index("live_classes_teacher_idx").on(t.teacherId, t.createdAt),
+  ],
+);
+
+// Transkrip kelas: satu baris per kalimat yang sudah final.
+export const liveClassSegments = pgTable(
+  "live_class_segments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    classId: uuid("class_id")
+      .notNull()
+      .references(() => liveClasses.id, { onDelete: "cascade" }),
+    seq: integer("seq").notNull(),
+    text: text("text").notNull(),
+    // Waktu ucapan relatif terhadap mulainya kelas (ms).
+    offsetMs: integer("offset_ms").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("live_class_segments_class_seq_unique").on(t.classId, t.seq)],
+);
+
+/* ------------------------------------------------------------------ */
 /* Tipe bantu                                                          */
 /* ------------------------------------------------------------------ */
 export type User = typeof users.$inferSelect;
@@ -482,3 +529,5 @@ export type ChatSession = typeof chatSessions.$inferSelect;
 export type ChatMessage = typeof chatMessages.$inferSelect;
 export type UserVocabulary = typeof userVocabulary.$inferSelect;
 export type News = typeof news.$inferSelect;
+export type LiveClass = typeof liveClasses.$inferSelect;
+export type LiveClassSegment = typeof liveClassSegments.$inferSelect;

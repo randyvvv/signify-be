@@ -19,7 +19,10 @@ export const env = {
   // Aktifkan fitur AI (chatbot/translator). Model belum ada, jadi default false.
   AI_ENABLED: process.env.AI_ENABLED === "true",
   GEMINI_API_KEY: process.env.GEMINI_API_KEY,
-  GEMINI_MODEL: process.env.GEMINI_MODEL ?? "gemini-2.5-flash",
+  // Gemini 2.5 sudah tidak tersedia untuk project baru, jadi default ke seri 3.
+  GEMINI_MODEL: process.env.GEMINI_MODEL ?? "gemini-3.5-flash",
+  // Model Gemini Live untuk transkripsi suara guru di Kelas Live.
+  LIVE_TRANSCRIBE_MODEL: process.env.LIVE_TRANSCRIBE_MODEL ?? "gemini-3.5-transcribe-live",
   // Text -> .pose (dipakai avatar) lewat penyedia eksternal: "signmt" (default) atau
   // "signgpt". Bahasa di luar POSE_API_LANGUAGES hanya memakai kamus isyarat lokal
   // (tabel sign_dictionary).

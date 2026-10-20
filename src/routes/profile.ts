@@ -43,6 +43,8 @@ const updateProfileSchema = z.object({
   gender: z.enum(["male", "female"]).optional(),
   bio: z.string().optional(),
   avatarUrl: z.string().url().optional(),
+  // "teacher" membuka fitur membuat Kelas Live.
+  role: z.enum(["learner", "teacher"]).optional(),
 });
 
 // PATCH /me

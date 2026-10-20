@@ -1,4 +1,9 @@
-import { GoogleGenAI } from "@google/genai";
+import {
+  GoogleGenAI,
+  ThinkingLevel,
+  type GenerateContentParameters,
+  type ThinkingConfig,
+} from "@google/genai";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { db } from "../db/index.js";
 import {
@@ -34,6 +39,32 @@ export function getGeminiClient(): GoogleGenAI {
   }
   geminiClient ??= new GoogleGenAI({ apiKey: env.GEMINI_API_KEY });
   return geminiClient;
+}
+
+// Error sementara dari Gemini (model sedang sibuk / kuota per menit).
+const RETRYABLE_STATUS = new Set([429, 500, 503]);
+const MAX_RETRIES = 2;
+
+/** generateContent dengan coba ulang singkat untuk error sementara. */
+export async function generateWithRetry(params: GenerateContentParameters) {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await getGeminiClient().models.generateContent(params);
+    } catch (err) {
+      const status = (err as { status?: number }).status;
+      if (attempt >= MAX_RETRIES || !status || !RETRYABLE_STATUS.has(status)) throw err;
+      await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
+    }
+  }
+}
+
+/**
+ * Thinking seminimal mungkin untuk tugas ringan (jawaban dari materi, ringkasan):
+ * tanpa ini token thinking ikut memakan maxOutputTokens dan jawaban terpotong.
+ * Gemini 2.x memakai thinkingBudget, seri 3 memakai thinkingLevel.
+ */
+export function minimalThinking(model = env.GEMINI_MODEL): ThinkingConfig {
+  return /^gemini-2\./.test(model) ? { thinkingBudget: 0 } : { thinkingLevel: ThinkingLevel.MINIMAL };
 }
 
 function clean(value: string | null | undefined): string {
@@ -212,14 +243,14 @@ export async function generateGroundedReply(input: {
 }): Promise<string> {
   if (!input.materialContext.hasUsableContent) return MATERIAL_NO_CONTEXT_REPLY;
 
-  const client = getGeminiClient();
-  const response = await client.models.generateContent({
+  const response = await generateWithRetry({
     model: env.GEMINI_MODEL,
     contents: buildPrompt(input),
     config: {
       systemInstruction: SYSTEM_INSTRUCTION,
       temperature: 0.2,
       maxOutputTokens: 512,
+      thinkingConfig: minimalThinking(),
     },
   });
 
@@ -241,11 +272,10 @@ export async function maybeSummarizeSession(sessionId: string): Promise<void> {
   if (!session) return;
 
   const messages = await loadRecentMessages(sessionId, 20);
-  const client = getGeminiClient();
-  const response = await client.models.generateContent({
+  const response = await generateWithRetry({
     model: env.GEMINI_MODEL,
     contents: `Summarize this learning-material chat for future context. Keep only stable facts, user confusion, and useful learning progress.\n\n${formatHistory(messages)}`,
-    config: { temperature: 0.1, maxOutputTokens: 256 },
+    config: { temperature: 0.1, maxOutputTokens: 512, thinkingConfig: minimalThinking() },
   });
 
   const summary = response.text?.trim();

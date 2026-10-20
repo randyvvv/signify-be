@@ -57,6 +57,13 @@
       "when": 1791560598316,
       "tag": "0007_google_sso",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1792425519974,
+      "tag": "0008_live_classes",
+      "breakpoints": true
     }
   ]
 }

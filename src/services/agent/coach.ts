@@ -3,7 +3,7 @@ import { and, asc, desc, eq } from "drizzle-orm";
 import { db } from "../../db/index.js";
 import { agentMessages, agentSessions } from "../../db/schema.js";
 import { env } from "../../lib/env.js";
-import { getGeminiClient } from "../chat.js";
+import { generateWithRetry } from "../chat.js";
 import { SIGN_LANGUAGES } from "../sign-translate.js";
 import type { GenerateFn } from "./runner.js";
 import type { CoachCard, CoachTool } from "./types.js";
@@ -31,7 +31,6 @@ Final answer:
 
 /** Adaptor Gemini (function calling) untuk runAgent. */
 export function createGeminiGenerate(tools: CoachTool[], systemInstruction: string): GenerateFn {
-  const client = getGeminiClient();
   const functionDeclarations = tools.map((t) => ({
     name: t.name,
     description: t.description,
@@ -39,14 +38,15 @@ export function createGeminiGenerate(tools: CoachTool[], systemInstruction: stri
   }));
 
   return async (contents) => {
-    const response = await client.models.generateContent({
+    const response = await generateWithRetry({
       model: env.GEMINI_MODEL,
       contents,
       config: {
         systemInstruction,
         tools: [{ functionDeclarations }],
         temperature: 0.4,
-        maxOutputTokens: 2048,
+        // Coach tetap memakai thinking penuh (memilih tool); token thinking ikut dihitung di sini.
+        maxOutputTokens: 4096,
       },
     });
     const functionCalls = response.functionCalls;

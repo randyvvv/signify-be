@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { serve } from "@hono/node-server";
+import { createNodeWebSocket } from "@hono/node-ws";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 import { swaggerUI } from "@hono/swagger-ui";
@@ -21,8 +22,10 @@ import signs from "./routes/signs.js";
 import vocabulary from "./routes/vocabulary.js";
 import agent from "./routes/agent.js";
 import news from "./routes/news.js";
+import live, { liveSocketEvents } from "./routes/live.js";
 
 const app = new Hono();
+const { injectWebSocket, upgradeWebSocket } = createNodeWebSocket({ app });
 
 app.use("*", logger());
 app.use(
@@ -41,6 +44,9 @@ app.get("/health", (c) => c.json({ status: "ok" }));
 app.get("/openapi.json", (c) => c.json(openApiDocument));
 app.get("/docs", swaggerUI({ url: "/openapi.json" }));
 
+// WebSocket Kelas Live (auth lewat pesan pertama, bukan header) -> sebelum router /api.
+app.get("/api/live/ws", upgradeWebSocket(() => liveSocketEvents()));
+
 const api = new Hono();
 api.route("/auth", auth);
 api.route("/me", profile);
@@ -56,6 +62,7 @@ api.route("/signs", signs);
 api.route("/vocabulary", vocabulary);
 api.route("/agent", agent);
 api.route("/news", news);
+api.route("/live", live);
 
 app.route("/api", api);
 
@@ -69,8 +76,9 @@ app.onError((err, c) => {
   return c.json({ error: "Internal server error" }, 500);
 });
 
-serve({ fetch: app.fetch, port: env.PORT }, (info) => {
+const server = serve({ fetch: app.fetch, port: env.PORT }, (info) => {
   console.log(`🚀 signify-api jalan di http://localhost:${info.port}`);
 });
+injectWebSocket(server);
 
 export default app;

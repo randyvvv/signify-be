@@ -27,6 +27,11 @@ export const openApiDocument = {
     { name: "AI" },
     { name: "Signify Coach" },
     { name: "News" },
+    {
+      name: "Live Class",
+      description:
+        "Teacher speaks, students get live captions and a signing avatar. Broadcasting runs over the WebSocket /api/live/ws (see README).",
+    },
     { name: "System" },
   ],
   components: {
@@ -64,12 +69,41 @@ export const openApiDocument = {
             description: "false = Google-only account (can set a first password via /api/me/password)",
           },
           googleLinked: { type: "boolean", description: "Account is linked to a Google account" },
+          role: {
+            type: "string",
+            enum: ["learner", "teacher"],
+            description: "teacher can create Live Classes",
+          },
           coins: { type: "integer" },
           streakCount: { type: "integer" },
           lastActiveDate: { type: "string", format: "date", nullable: true },
           totalLearningSeconds: { type: "integer" },
           createdAt: { type: "string", format: "date-time" },
           updatedAt: { type: "string", format: "date-time" },
+        },
+      },
+      LiveClass: {
+        type: "object",
+        properties: {
+          id: { type: "string", format: "uuid" },
+          code: { type: "string", example: "K7P2QX", description: "6-character join code" },
+          title: { type: "string" },
+          spokenLanguage: { type: "string", enum: ["en", "id"] },
+          signedLanguage: { type: "string", enum: ["ase", "ins"] },
+          status: { type: "string", enum: ["waiting", "live", "ended"] },
+          teacherId: { type: "string", format: "uuid" },
+          teacherName: { type: "string", nullable: true },
+          startedAt: { type: "string", format: "date-time", nullable: true },
+          endedAt: { type: "string", format: "date-time", nullable: true },
+          createdAt: { type: "string", format: "date-time" },
+        },
+      },
+      LiveSegment: {
+        type: "object",
+        properties: {
+          seq: { type: "integer" },
+          text: { type: "string" },
+          offsetMs: { type: "integer", description: "Milliseconds since the class started" },
         },
       },
       MeResponse: {
@@ -600,6 +634,11 @@ export const openApiDocument = {
                   gender: { type: "string", enum: ["male", "female"] },
                   bio: { type: "string" },
                   avatarUrl: { type: "string", format: "uri" },
+                  role: {
+                    type: "string",
+                    enum: ["learner", "teacher"],
+                    description: "Teacher Mode (create Live Classes)",
+                  },
                 },
               },
             },
@@ -2025,6 +2064,114 @@ export const openApiDocument = {
             },
           },
           "401": { $ref: "#/components/responses/Unauthorized" },
+        },
+      },
+    },
+    "/api/live/classes": {
+      get: {
+        tags: ["Live Class"],
+        summary: "Classes created by the signed-in teacher (newest first)",
+        responses: {
+          "200": {
+            description: "OK",
+            content: {
+              "application/json": {
+                schema: { type: "array", items: { $ref: "#/components/schemas/LiveClass" } },
+              },
+            },
+          },
+          "403": { description: "Teacher Mode is off (code teacher_only)" },
+        },
+      },
+      post: {
+        tags: ["Live Class"],
+        summary: "Create a Live Class (teacher only)",
+        description:
+          "Generates a join code. signedLanguage defaults to ase for English and ins (BISINDO) for Indonesian.",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["title"],
+                properties: {
+                  title: { type: "string", maxLength: 120 },
+                  spokenLanguage: { type: "string", enum: ["en", "id"], default: "en" },
+                  signedLanguage: { type: "string", enum: ["ase", "ins"] },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "201": {
+            description: "Created",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/LiveClass" } } },
+          },
+          "403": { description: "Teacher Mode is off (code teacher_only)" },
+        },
+      },
+    },
+    "/api/live/classes/{code}": {
+      get: {
+        tags: ["Live Class"],
+        summary: "Class info by join code (case-insensitive)",
+        parameters: [{ name: "code", in: "path", required: true, schema: { type: "string" } }],
+        responses: {
+          "200": {
+            description: "OK",
+            content: {
+              "application/json": {
+                schema: {
+                  allOf: [
+                    { $ref: "#/components/schemas/LiveClass" },
+                    {
+                      type: "object",
+                      properties: {
+                        broadcasting: { type: "boolean" },
+                        viewers: { type: "integer" },
+                        isTeacher: { type: "boolean" },
+                      },
+                    },
+                  ],
+                },
+              },
+            },
+          },
+          "404": { description: "Class not found (code class_not_found)" },
+        },
+      },
+    },
+    "/api/live/classes/{code}/segments": {
+      get: {
+        tags: ["Live Class"],
+        summary: "Full transcript of a class",
+        parameters: [{ name: "code", in: "path", required: true, schema: { type: "string" } }],
+        responses: {
+          "200": {
+            description: "OK",
+            content: {
+              "application/json": {
+                schema: { type: "array", items: { $ref: "#/components/schemas/LiveSegment" } },
+              },
+            },
+          },
+          "404": { description: "Class not found" },
+        },
+      },
+    },
+    "/api/live/classes/{code}/end": {
+      post: {
+        tags: ["Live Class"],
+        summary: "End a class (its teacher only)",
+        parameters: [{ name: "code", in: "path", required: true, schema: { type: "string" } }],
+        responses: {
+          "200": {
+            description: "Ended",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/LiveClass" } } },
+          },
+          "403": { description: "Not the teacher of this class" },
         },
       },
     },

@@ -182,6 +182,32 @@ can be an absolute URL or a path to a frontend asset (`/news/<slug>/cover.jpg`).
 | PATCH | `/api/news/:id` | update any of those fields (admin) |
 | DELETE | `/api/news/:id` | delete an article (admin) |
 
+### Live Class
+A teacher speaks and every student in the class gets live captions plus the
+signing avatar. Turn on Teacher Mode with `PATCH /api/me { role: "teacher" }`.
+| Method | Path | Description |
+|---|---|---|
+| GET | `/api/live/classes` | the teacher's classes (teacher only) |
+| POST | `/api/live/classes` | `{ title, spokenLanguage?: "en" \| "id", signedLanguage? }` → class with a 6-character `code` (teacher only) |
+| GET | `/api/live/classes/:code` | class info + `broadcasting`, `viewers`, `isTeacher` |
+| GET | `/api/live/classes/:code/segments` | full transcript `[{ seq, text, offsetMs }]` |
+| POST | `/api/live/classes/:code/end` | end the class (its teacher only) |
+
+Broadcasting runs over the WebSocket `GET /api/live/ws`:
+- The first message must be `{ "type": "auth", "token": "<JWT>", "code": "K7P2QX" }`
+  (the token is not put in the URL so it stays out of logs). The server replies
+  `ready` with the role (`teacher` for the class owner, else `student`), the class
+  and the last 100 transcript sentences.
+- The teacher sends `{ "type": "start" | "stop" | "end" }` and binary frames of
+  16 kHz mono PCM16 audio (the frontend sends 100 ms chunks).
+- The server transcribes with Gemini Live (`LIVE_TRANSCRIBE_MODEL`, default
+  `gemini-3.5-transcribe-live`), splits the speech into sentences and broadcasts
+  `partial` (live caption), `segment` (final sentence, also saved to
+  `live_class_segments`) and `pose_ready` once the sentence's sign animation is in
+  `pose_cache`, plus `status`, `viewers`, `error` and a `ping` every 25 s.
+- Requires `AI_ENABLED=true` and `GEMINI_API_KEY`. Rooms live in memory, so the API
+  must run as a single instance. A broadcast stops on its own after 2 hours.
+
 ### AI
 Gated by `AI_ENABLED` (default `false`). The chatbot also requires
 `GEMINI_API_KEY` and uses `GEMINI_MODEL` (default `gemini-2.5-flash`).
