@@ -22,6 +22,7 @@ import signs from "./routes/signs.js";
 import vocabulary from "./routes/vocabulary.js";
 import agent from "./routes/agent.js";
 import news from "./routes/news.js";
+import roleplay from "./routes/roleplay.js";
 import live, { liveSocketEvents } from "./routes/live.js";
 
 const app = new Hono();
@@ -62,6 +63,7 @@ api.route("/signs", signs);
 api.route("/vocabulary", vocabulary);
 api.route("/agent", agent);
 api.route("/news", news);
+api.route("/roleplay", roleplay);
 api.route("/live", live);
 
 app.route("/api", api);

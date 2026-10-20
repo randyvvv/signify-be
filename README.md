@@ -225,6 +225,8 @@ Gated by `AI_ENABLED` (default `false`). The chatbot also requires
 | POST | `/api/translator/recognize` | `{ frames: T×59×3, fps? }` → `{ text, confidence }` via the signify-model server at `SIGN_MODEL_URL`; `503 model_unavailable` when unset |
 | POST | `/api/translator/sentence` | `{ text, lang? }` (`id`/`en`) → `{ text }`: Gemini turns sign glosses ("I WANT COFFEE TWO") into a natural spoken sentence |
 | POST | `/api/translator/speak` | `{ text, voice? }` (`female`/`male`) → `audio/wav` from Gemini TTS (`TTS_MODEL`, default `gemini-3.8-flash-tts`), cached in memory; `503 ai_unavailable` / `tts_failed` makes the frontend use the browser voice |
+| GET | `/api/roleplay/scenarios` | role-play scenarios with Signa (café, job interview, new classmate, doctor), titles in `en`/`id` |
+| POST | `/api/roleplay/turn` | `{ scenarioId, lang?, history: [{ from, text, score? }] }` → Signa's next turn `{ line, replies: [{ text, gloss }], done, summary, source }`; Gemini when available, otherwise the scenario's built-in script |
 | POST | `/api/translator/sessions` | register a livestream URL and persist it for the user |
 | GET | `/api/translator/sessions` | list the user's sessions |
 | GET | `/api/translator/sessions/:id` | session detail |

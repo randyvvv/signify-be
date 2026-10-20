@@ -1821,6 +1821,99 @@ export const openApiDocument = {
         },
       },
     },
+    "/api/roleplay/scenarios": {
+      get: {
+        tags: ["AI"],
+        summary: "Role-play scenarios with Signa",
+        description: "Everyday situations the learner can practice in sign language. Titles and descriptions come in en and id.",
+        responses: {
+          "200": {
+            description: "OK",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      id: { type: "string", example: "cafe" },
+                      icon: { type: "string", enum: ["coffee", "briefcase", "users", "stethoscope"] },
+                      title: { type: "object", properties: { en: { type: "string" }, id: { type: "string" } } },
+                      description: { type: "object", properties: { en: { type: "string" }, id: { type: "string" } } },
+                      turns: { type: "integer", description: "Learner replies before Signa wraps up" },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          "401": { $ref: "#/components/responses/Unauthorized" },
+        },
+      },
+    },
+    "/api/roleplay/turn": {
+      post: {
+        tags: ["AI"],
+        summary: "Signa's next role-play turn",
+        description:
+          "Stateless: the client sends the conversation so far. An empty history returns the scenario's opening line. Signa answers in character and suggests replies, each with the 1-3 key signs (gloss) to perform; after the scenario's last learner turn it closes the conversation with a summary. Uses Gemini when available and the scenario's built-in script otherwise (source).",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["scenarioId"],
+                properties: {
+                  scenarioId: { type: "string", example: "cafe" },
+                  lang: { type: "string", enum: ["en", "id"], default: "en" },
+                  history: {
+                    type: "array",
+                    maxItems: 20,
+                    items: {
+                      type: "object",
+                      required: ["from", "text"],
+                      properties: {
+                        from: { type: "string", enum: ["signa", "learner"] },
+                        text: { type: "string", maxLength: 300 },
+                        score: { type: "integer", minimum: 0, maximum: 100, nullable: true },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "OK",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    line: { type: "string" },
+                    replies: {
+                      type: "array",
+                      items: {
+                        type: "object",
+                        properties: { text: { type: "string" }, gloss: { type: "string", example: "COFFEE PLEASE" } },
+                      },
+                    },
+                    done: { type: "boolean" },
+                    summary: { type: "string", nullable: true },
+                    source: { type: "string", enum: ["gemini", "script"] },
+                  },
+                },
+              },
+            },
+          },
+          "404": { description: "Unknown scenario (scenario_not_found)" },
+          "401": { $ref: "#/components/responses/Unauthorized" },
+        },
+      },
+    },
     "/api/signs/languages": {
       get: {
         tags: ["Sign Dictionary"],
