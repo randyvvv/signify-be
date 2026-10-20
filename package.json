@@ -26,6 +26,7 @@
     "dotenv": "^16.4.7",
     "drizzle-orm": "^0.38.3",
     "hono": "^4.6.16",
+    "livekit-server-sdk": "^2.19.1",
     "postgres": "^3.4.5",
     "zod": "^3.24.1"
   },

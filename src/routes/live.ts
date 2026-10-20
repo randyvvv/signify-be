@@ -4,7 +4,7 @@ import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { count, desc, eq } from "drizzle-orm";
 import { db } from "../db/index.js";
-import { liveClasses, liveClassSegments, materials, quizQuestions, quizzes } from "../db/schema.js";
+import { liveClasses, liveClassSegments, materials, quizQuestions, quizzes, users } from "../db/schema.js";
 import { verifyToken } from "../lib/auth.js";
 import { env } from "../lib/env.js";
 import { badRequest, conflict, forbidden, notFound, serviceUnavailable } from "../lib/errors.js";
@@ -25,6 +25,7 @@ import {
   type LiveServerEvent,
 } from "../services/live-class.js";
 import { generateClassCode, normalizeClassCode } from "../services/live-transcript.js";
+import { createVideoToken, videoCredentials } from "../services/live-video.js";
 import { SIGN_LANGUAGE_CODES } from "../services/sign-translate.js";
 
 const live = new Hono<{ Variables: AuthVariables }>();
@@ -95,6 +96,7 @@ live.get("/classes/:code", async (c) => {
     isTeacher: cls.teacherId === c.get("userId"),
     materialId: cls.materialId,
     quizId: cls.quizId,
+    videoEnabled: videoCredentials() !== null,
   });
 });
 
@@ -120,6 +122,24 @@ live.post("/classes/:code/end", async (c) => {
   }
   const ended = await classByCode(cls.code);
   return c.json(toLiveClassDto(ended.cls, teacherName));
+});
+
+// POST /api/live/classes/:code/video-token -> token LiveKit (guru: menyiarkan kamera & suara; murid: menonton)
+live.post("/classes/:code/video-token", async (c) => {
+  const credentials = videoCredentials();
+  if (!credentials) throw serviceUnavailable("Video Kelas Live belum dikonfigurasi", "video_unavailable");
+  const userId = c.get("userId");
+  const { cls } = await classByCode(c.req.param("code"));
+  if (cls.status === "ended") throw conflict("Kelas ini sudah berakhir", "class_ended");
+  const user = await db.query.users.findFirst({ where: eq(users.id, userId) });
+  const canPublish = cls.teacherId === userId;
+  const token = await createVideoToken(credentials, {
+    classId: cls.id,
+    userId,
+    name: user?.fullName ?? null,
+    canPublish,
+  });
+  return c.json({ url: credentials.url, token, canPublish });
 });
 
 const toMaterialSchema = z.object({ category: z.enum(MATERIAL_CATEGORIES).default("K-12") });

@@ -44,6 +44,10 @@ export const env = {
   // OAuth Client ID Google untuk "Sign in with Google" (boleh lebih dari satu,
   // dipisah koma). Kosong = POST /api/auth/google nonaktif.
   GOOGLE_CLIENT_IDS: list(process.env.GOOGLE_CLIENT_ID ?? ""),
+  // LiveKit (video guru di Kelas Live). Kosong = Kelas Live tanpa video.
+  LIVEKIT_URL: process.env.LIVEKIT_URL?.trim() || undefined,
+  LIVEKIT_API_KEY: process.env.LIVEKIT_API_KEY?.trim() || undefined,
+  LIVEKIT_API_SECRET: process.env.LIVEKIT_API_SECRET?.trim() || undefined,
 };
 
 function list(value: string): string[] {

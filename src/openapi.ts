@@ -2215,6 +2215,7 @@ export const openApiDocument = {
                         broadcasting: { type: "boolean" },
                         viewers: { type: "integer" },
                         isTeacher: { type: "boolean" },
+                        videoEnabled: { type: "boolean", description: "LiveKit video is configured" },
                       },
                     },
                   ],
@@ -2241,6 +2242,34 @@ export const openApiDocument = {
             },
           },
           "404": { description: "Class not found" },
+        },
+      },
+    },
+    "/api/live/classes/{code}/video-token": {
+      post: {
+        tags: ["Live Class"],
+        summary: "LiveKit token for the class video",
+        description:
+          "The class teacher may publish camera and microphone; everyone else joins as a viewer. Requires LIVEKIT_URL, LIVEKIT_API_KEY and LIVEKIT_API_SECRET.",
+        parameters: [{ name: "code", in: "path", required: true, schema: { type: "string" } }],
+        responses: {
+          "200": {
+            description: "OK",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    url: { type: "string", description: "LiveKit WebSocket URL" },
+                    token: { type: "string" },
+                    canPublish: { type: "boolean" },
+                  },
+                },
+              },
+            },
+          },
+          "409": { description: "Class has ended (code class_ended)" },
+          "503": { description: "Video not configured (code video_unavailable)" },
         },
       },
     },
