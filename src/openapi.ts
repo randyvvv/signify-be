@@ -1755,6 +1755,72 @@ export const openApiDocument = {
         },
       },
     },
+    "/api/translator/sentence": {
+      post: {
+        tags: ["AI"],
+        summary: "Sign glosses -> natural sentence (Gemini)",
+        description:
+          "Rewrites what the user signed (glosses in signing order, e.g. \"I WANT COFFEE TWO\") or typed as one natural first-person sentence in the chosen language, ready to be spoken.",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["text"],
+                properties: {
+                  text: { type: "string", maxLength: 500 },
+                  lang: { type: "string", enum: ["id", "en"], default: "en" },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "OK",
+            content: {
+              "application/json": {
+                schema: { type: "object", properties: { text: { type: "string" } } },
+              },
+            },
+          },
+          "503": { description: "AI disabled (ai_unavailable) or Gemini failed (ai_request_failed)" },
+          "401": { $ref: "#/components/responses/Unauthorized" },
+        },
+      },
+    },
+    "/api/translator/speak": {
+      post: {
+        tags: ["AI"],
+        summary: "Text -> speech (Gemini TTS)",
+        description:
+          "Speaks the signer's sentence with a natural Gemini TTS voice (TTS_MODEL). Audio is cached in memory per text and voice. On 503 the frontend falls back to the browser's speechSynthesis.",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["text"],
+                properties: {
+                  text: { type: "string", maxLength: 500 },
+                  voice: { type: "string", enum: ["female", "male"], default: "female" },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "WAV audio (16-bit mono PCM)",
+            content: { "audio/wav": { schema: { type: "string", format: "binary" } } },
+          },
+          "503": { description: "AI disabled (ai_unavailable) or TTS failed (tts_failed)" },
+          "401": { $ref: "#/components/responses/Unauthorized" },
+        },
+      },
+    },
     "/api/signs/languages": {
       get: {
         tags: ["Sign Dictionary"],

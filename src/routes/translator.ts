@@ -8,6 +8,15 @@ import { env } from "../lib/env.js";
 import { notFound, serviceUnavailable } from "../lib/errors.js";
 import { requireAuth, type AuthVariables } from "../middleware/auth.js";
 import { SIGN_LANGUAGE_CODES, translateTextToPose } from "../services/sign-translate.js";
+import {
+  MAX_SPEECH_CHARS,
+  SPEECH_LANGUAGES,
+  SPEECH_VOICES,
+  composeSentence,
+  normalizeSpeechText,
+  synthesizeSpeech,
+  type SpeechVoice,
+} from "../services/speech.js";
 import { getSignLanguage } from "../services/vocabulary.js";
 import { extractVideoId, fetchTranscriptViaApi } from "../services/youtube.js";
 
@@ -112,6 +121,40 @@ route.post("/recognize", zValidator("json", recognizeSchema), async (c) => {
 
   const data = (await res.json()) as { text?: string; confidence?: number };
   return c.json({ text: data.text?.trim() ?? "", confidence: data.confidence ?? null });
+});
+
+const speechText = z.string().transform(normalizeSpeechText).pipe(z.string().min(1).max(MAX_SPEECH_CHARS));
+
+const sentenceSchema = z.object({
+  text: speechText,
+  lang: z.enum(SPEECH_LANGUAGES).default("en"),
+});
+
+/**
+ * POST /api/translator/sentence — gloss isyarat -> kalimat lisan yang wajar (Gemini).
+ * Dipakai sebelum kalimat dibacakan; pengguna masih bisa mengedit hasilnya.
+ */
+route.post("/sentence", zValidator("json", sentenceSchema), async (c) => {
+  const { text, lang } = c.req.valid("json");
+  return c.json({ text: await composeSentence(text, lang) });
+});
+
+const speakSchema = z.object({
+  text: speechText,
+  voice: z.enum(Object.keys(SPEECH_VOICES) as [SpeechVoice, ...SpeechVoice[]]).default("female"),
+});
+
+/**
+ * POST /api/translator/speak — teks -> audio WAV (Gemini TTS) untuk Isyarat -> Suara.
+ * 503 ai_unavailable / tts_failed: frontend beralih ke suara bawaan browser.
+ */
+route.post("/speak", zValidator("json", speakSchema), async (c) => {
+  const { text, voice } = c.req.valid("json");
+  const audio = await synthesizeSpeech(text, voice);
+  return c.body(new Uint8Array(audio), 200, {
+    "Content-Type": "audio/wav",
+    "Cache-Control": "private, max-age=86400",
+  });
 });
 
 const createSchema = z.object({

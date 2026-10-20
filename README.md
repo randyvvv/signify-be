@@ -215,7 +215,7 @@ Broadcasting runs over the WebSocket `GET /api/live/ws`:
 
 ### AI
 Gated by `AI_ENABLED` (default `false`). The chatbot also requires
-`GEMINI_API_KEY` and uses `GEMINI_MODEL` (default `gemini-2.5-flash`).
+`GEMINI_API_KEY` and uses `GEMINI_MODEL` (default `gemini-3.5-flash`).
 | Method | Path | Description |
 |---|---|---|
 | GET | `/api/chat?materialId=` | saved material chat history for the authenticated user |
@@ -223,6 +223,8 @@ Gated by `AI_ENABLED` (default `false`). The chatbot also requires
 | POST | `/api/translator/transcript` | `{ url, lang? }` → fetch YouTube captions (`{ cues, source }`) that power the Live Translator |
 | POST | `/api/translator/pose` | `{ text, signedLanguage?, spokenLanguage? }` → `{ clips: [{ text, source, pose }], missing }`; sign dictionary first, then the provider from `POSE_PROVIDER` (default sign.mt, cached, only for `POSE_API_LANGUAGES`) |
 | POST | `/api/translator/recognize` | `{ frames: T×59×3, fps? }` → `{ text, confidence }` via the signify-model server at `SIGN_MODEL_URL`; `503 model_unavailable` when unset |
+| POST | `/api/translator/sentence` | `{ text, lang? }` (`id`/`en`) → `{ text }`: Gemini turns sign glosses ("I WANT COFFEE TWO") into a natural spoken sentence |
+| POST | `/api/translator/speak` | `{ text, voice? }` (`female`/`male`) → `audio/wav` from Gemini TTS (`TTS_MODEL`, default `gemini-3.8-flash-tts`), cached in memory; `503 ai_unavailable` / `tts_failed` makes the frontend use the browser voice |
 | POST | `/api/translator/sessions` | register a livestream URL and persist it for the user |
 | GET | `/api/translator/sessions` | list the user's sessions |
 | GET | `/api/translator/sessions/:id` | session detail |

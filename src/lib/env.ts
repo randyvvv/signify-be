@@ -23,6 +23,8 @@ export const env = {
   GEMINI_MODEL: process.env.GEMINI_MODEL ?? "gemini-3.5-flash",
   // Model Gemini Live untuk transkripsi suara guru di Kelas Live.
   LIVE_TRANSCRIBE_MODEL: process.env.LIVE_TRANSCRIBE_MODEL ?? "gemini-3.5-transcribe-live",
+  // Model Gemini TTS untuk Isyarat -> Suara (kalimat dari isyarat dibacakan).
+  TTS_MODEL: process.env.TTS_MODEL ?? "gemini-3.8-flash-tts",
   // Text -> .pose (dipakai avatar) lewat penyedia eksternal: "signmt" (default) atau
   // "signgpt". Bahasa di luar POSE_API_LANGUAGES hanya memakai kamus isyarat lokal
   // (tabel sign_dictionary).
