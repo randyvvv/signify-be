@@ -119,6 +119,9 @@ without `currentPassword`. Without `GOOGLE_CLIENT_ID` the endpoint returns 503
 | GET | `/api/materials/:id` | detail + the user's progress |
 | GET | `/api/materials/:id/recommended` | recommendations in the same category |
 | PUT | `/api/materials/:id/progress` | `{ progress, durationSeconds? }` |
+| GET | `/api/materials/mine` | materials created by the teacher (teacher only) |
+| POST | `/api/materials` | teacher creates `{ type: "video", videoUrl }` (YouTube; embed, thumbnail, transcript and duration filled in) or `{ type: "article", content }` (Markdown), plus `title, description?, category, language?` |
+| DELETE | `/api/materials/:id` | delete own material (and the quiz generated with it) |
 
 ### Quizzes
 | Method | Path | Description |
@@ -192,6 +195,7 @@ signing avatar. Turn on Teacher Mode with `PATCH /api/me { role: "teacher" }`.
 | GET | `/api/live/classes/:code` | class info + `broadcasting`, `viewers`, `isTeacher` |
 | GET | `/api/live/classes/:code/segments` | full transcript `[{ seq, text, offsetMs }]` |
 | POST | `/api/live/classes/:code/end` | end the class (its teacher only) |
+| POST | `/api/live/classes/:code/material` | `{ category? }` → Gemini turns the transcript into an accessible article + 5-question quiz (once per class) |
 
 Broadcasting runs over the WebSocket `GET /api/live/ws`:
 - The first message must be `{ "type": "auth", "token": "<JWT>", "code": "K7P2QX" }`

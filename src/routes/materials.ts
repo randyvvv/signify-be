@@ -1,16 +1,131 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
-import { and, eq, ilike, ne, sql } from "drizzle-orm";
+import { and, desc, eq, ilike, ne, sql } from "drizzle-orm";
 import { db } from "../db/index.js";
-import { materials, userMaterialProgress } from "../db/schema.js";
+import { liveClasses, materials, quizzes, userMaterialProgress } from "../db/schema.js";
 import { parsePagination, paginated } from "../lib/pagination.js";
-import { notFound } from "../lib/errors.js";
+import { badRequest, forbidden, notFound } from "../lib/errors.js";
+import { requireTeacher } from "../lib/teacher.js";
+import { readingMinutes } from "../services/news.js";
+import {
+  ARTICLE_THUMBNAIL,
+  MATERIAL_CATEGORIES,
+  MATERIAL_LANGUAGES,
+  cuesDurationMinutes,
+  cuesToParagraphs,
+  youtubeEmbedUrl,
+  youtubeThumbnailUrl,
+} from "../services/teacher-content.js";
+import { extractVideoId, fetchTranscriptViaApi } from "../services/youtube.js";
 import { recordActivity } from "../services/activity.js";
 import { requireAuth, type AuthVariables } from "../middleware/auth.js";
 
 const route = new Hono<{ Variables: AuthVariables }>();
 route.use("*", requireAuth);
+
+// GET /materials/mine -> materi buatan guru yang login (sebelum "/:id")
+route.get("/mine", async (c) => {
+  const userId = c.get("userId");
+  await requireTeacher(userId);
+  const rows = await db
+    .select()
+    .from(materials)
+    .where(eq(materials.ownerId, userId))
+    .orderBy(desc(materials.createdAt));
+  return c.json(rows);
+});
+
+const materialFields = {
+  title: z.string().trim().min(1).max(160),
+  description: z.string().trim().max(500).optional(),
+  category: z.enum(MATERIAL_CATEGORIES),
+  language: z.enum(MATERIAL_LANGUAGES).default("en"),
+};
+
+const createMaterialSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("video"), videoUrl: z.string().trim().min(1), ...materialFields }),
+  z.object({
+    type: z.literal("article"),
+    content: z.string().trim().min(20).max(50_000), // markdown
+    articleUrl: z.string().url().optional(),
+    ...materialFields,
+  }),
+]);
+
+// POST /materials -> guru membuat materi (video YouTube atau artikel), langsung tampil di Learning Materials
+route.post("/", zValidator("json", createMaterialSchema), async (c) => {
+  const userId = c.get("userId");
+  await requireTeacher(userId);
+  const body = c.req.valid("json");
+  const base = {
+    title: body.title,
+    description: body.description || null,
+    category: body.category,
+    language: body.language,
+    ownerId: userId,
+  };
+
+  if (body.type === "video") {
+    const videoId = extractVideoId(body.videoUrl);
+    if (!videoId) throw badRequest("Link YouTube tidak valid", "invalid_youtube_url");
+    // Transkrip dipakai chatbot materi & avatar; video tanpa caption tetap bisa disimpan.
+    let transcript: string[] | null = null;
+    let durationMinutes: number | null = null;
+    try {
+      const cues = await fetchTranscriptViaApi(videoId, body.language);
+      transcript = cuesToParagraphs(cues);
+      durationMinutes = cuesDurationMinutes(cues);
+    } catch (err) {
+      console.warn("[materials] transkrip YouTube tidak tersedia:", err instanceof Error ? err.message : err);
+    }
+    const [created] = await db
+      .insert(materials)
+      .values({
+        ...base,
+        type: "video",
+        videoUrl: youtubeEmbedUrl(videoId),
+        // Host thumbnail harus terdaftar di next.config frontend, jadi tidak menerima URL bebas.
+        thumbnailUrl: youtubeThumbnailUrl(videoId),
+        transcript: transcript?.length ? transcript : null,
+        durationMinutes,
+      })
+      .returning();
+    return c.json(created, 201);
+  }
+
+  const [created] = await db
+    .insert(materials)
+    .values({
+      ...base,
+      type: "article",
+      content: [body.content],
+      articleUrl: body.articleUrl ?? null,
+      thumbnailUrl: ARTICLE_THUMBNAIL,
+      durationMinutes: readingMinutes(body.content),
+      pages: 1,
+    })
+    .returning();
+  return c.json(created, 201);
+});
+
+// DELETE /materials/:id -> hapus materi milik guru sendiri (+ kuis yang dibuat dari kelas yang sama)
+route.delete("/:id", async (c) => {
+  const userId = c.get("userId");
+  const material = await db.query.materials.findFirst({ where: eq(materials.id, c.req.param("id")) });
+  if (!material) throw notFound("Material tidak ditemukan");
+  if (material.ownerId !== userId) throw forbidden("Hanya pembuat materi yang bisa menghapusnya");
+  const linked = await db
+    .select({ quizId: liveClasses.quizId })
+    .from(liveClasses)
+    .where(eq(liveClasses.materialId, material.id));
+  await db.transaction(async (tx) => {
+    // Kuis kelas bersifat publik; tanpa ini kuisnya tertinggal setelah materinya dihapus.
+    for (const { quizId } of linked) if (quizId) await tx.delete(quizzes).where(eq(quizzes.id, quizId));
+    await tx.delete(materials).where(eq(materials.id, material.id));
+  });
+  return c.json({ ok: true });
+});
 
 // GET /materials?search=&category=&language=&page=&limit=
 route.get("/", async (c) => {

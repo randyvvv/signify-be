@@ -22,6 +22,7 @@ function material(overrides: Partial<Material>): Material {
     articleUrl: null,
     videoUrl: null,
     transcript: null,
+    ownerId: null,
     createdAt: new Date("2026-06-01T00:00:00Z"),
     ...overrides,
   };

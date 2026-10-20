@@ -2,11 +2,19 @@ import { Hono } from "hono";
 import type { WSContext, WSEvents } from "hono/ws";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
-import { desc, eq } from "drizzle-orm";
+import { count, desc, eq } from "drizzle-orm";
 import { db } from "../db/index.js";
-import { liveClasses, users } from "../db/schema.js";
+import { liveClasses, liveClassSegments, materials, quizQuestions, quizzes } from "../db/schema.js";
 import { verifyToken } from "../lib/auth.js";
-import { forbidden, notFound, serviceUnavailable } from "../lib/errors.js";
+import { env } from "../lib/env.js";
+import { badRequest, conflict, forbidden, notFound, serviceUnavailable } from "../lib/errors.js";
+import { requireTeacher } from "../lib/teacher.js";
+import { readingMinutes } from "../services/news.js";
+import {
+  LIVE_CLASS_THUMBNAIL,
+  MATERIAL_CATEGORIES,
+  generateMaterialFromTranscript,
+} from "../services/teacher-content.js";
 import { requireAuth, type AuthVariables } from "../middleware/auth.js";
 import {
   findLiveClassByCode,
@@ -23,14 +31,6 @@ const live = new Hono<{ Variables: AuthVariables }>();
 live.use("/classes", requireAuth);
 live.use("/classes/*", requireAuth);
 
-async function assertTeacher(userId: string): Promise<{ fullName: string | null }> {
-  const user = await db.query.users.findFirst({ where: eq(users.id, userId) });
-  if (user?.role !== "teacher") {
-    throw forbidden("Aktifkan Mode Pengajar di Settings untuk membuat Kelas Live", "teacher_only");
-  }
-  return user;
-}
-
 async function classByCode(code: string) {
   const row = await findLiveClassByCode(normalizeClassCode(code));
   if (!row) throw notFound("Kelas tidak ditemukan. Cek lagi kodenya.", "class_not_found");
@@ -43,23 +43,32 @@ const createSchema = z.object({
   signedLanguage: z.enum(SIGN_LANGUAGE_CODES).optional(),
 });
 
-// GET /api/live/classes -> kelas milik guru yang login (terbaru dulu)
+// GET /api/live/classes -> kelas milik guru yang login (terbaru dulu) + jumlah kalimat transkrip
 live.get("/classes", async (c) => {
   const userId = c.get("userId");
-  const teacher = await assertTeacher(userId);
+  const teacher = await requireTeacher(userId);
   const rows = await db
-    .select()
+    .select({ cls: liveClasses, segmentCount: count(liveClassSegments.id) })
     .from(liveClasses)
+    .leftJoin(liveClassSegments, eq(liveClassSegments.classId, liveClasses.id))
     .where(eq(liveClasses.teacherId, userId))
+    .groupBy(liveClasses.id)
     .orderBy(desc(liveClasses.createdAt))
     .limit(50);
-  return c.json(rows.map((row) => toLiveClassDto(row, teacher.fullName)));
+  return c.json(
+    rows.map(({ cls, segmentCount }) => ({
+      ...toLiveClassDto(cls, teacher.fullName),
+      segmentCount,
+      materialId: cls.materialId,
+      quizId: cls.quizId,
+    })),
+  );
 });
 
 // POST /api/live/classes -> buat kelas baru (kode gabung dibuat otomatis)
 live.post("/classes", zValidator("json", createSchema), async (c) => {
   const userId = c.get("userId");
-  const teacher = await assertTeacher(userId);
+  const teacher = await requireTeacher(userId);
   const { title, spokenLanguage } = c.req.valid("json");
   const signedLanguage =
     c.req.valid("json").signedLanguage ?? (spokenLanguage === "id" ? "ins" : "ase");
@@ -84,6 +93,8 @@ live.get("/classes/:code", async (c) => {
     broadcasting: room?.broadcasting ?? false,
     viewers: room?.viewers ?? 0,
     isTeacher: cls.teacherId === c.get("userId"),
+    materialId: cls.materialId,
+    quizId: cls.quizId,
   });
 });
 
@@ -109,6 +120,79 @@ live.post("/classes/:code/end", async (c) => {
   }
   const ended = await classByCode(cls.code);
   return c.json(toLiveClassDto(ended.cls, teacherName));
+});
+
+const toMaterialSchema = z.object({ category: z.enum(MATERIAL_CATEGORIES).default("K-12") });
+
+// POST /api/live/classes/:code/material -> transkrip kelas jadi artikel belajar + kuis (Gemini)
+live.post("/classes/:code/material", zValidator("json", toMaterialSchema), async (c) => {
+  const userId = c.get("userId");
+  const { cls } = await classByCode(c.req.param("code"));
+  if (cls.teacherId !== userId) throw forbidden("Hanya guru kelas ini yang bisa membuat materinya");
+  if (cls.materialId) throw conflict("Materi untuk kelas ini sudah dibuat", "material_exists");
+  const segments = await listSegments(cls.id);
+  if (segments.length < 3) throw badRequest("Transkrip kelas terlalu pendek untuk dijadikan materi", "transcript_too_short");
+  if (!env.AI_ENABLED || !env.GEMINI_API_KEY) {
+    throw serviceUnavailable("Fitur AI belum dikonfigurasi di server", "ai_unavailable");
+  }
+
+  const transcript = segments.map((s) => s.text);
+  let generated;
+  try {
+    generated = await generateMaterialFromTranscript({
+      classTitle: cls.title,
+      language: cls.spokenLanguage,
+      transcript,
+    });
+  } catch (err) {
+    console.error("[live] gagal membuat materi:", err instanceof Error ? err.message : err);
+    throw serviceUnavailable("AI gagal menyusun materi, coba lagi", "generation_failed");
+  }
+
+  const { category } = c.req.valid("json");
+  const result = await db.transaction(async (tx) => {
+    const [material] = await tx
+      .insert(materials)
+      .values({
+        title: generated.title,
+        description: generated.description,
+        type: "article",
+        category,
+        language: cls.spokenLanguage,
+        content: generated.sections,
+        transcript,
+        durationMinutes: readingMinutes(generated.sections.join("\n\n")),
+        pages: generated.sections.length,
+        thumbnailUrl: LIVE_CLASS_THUMBNAIL,
+        ownerId: userId,
+      })
+      .returning();
+    const [quiz] = await tx
+      .insert(quizzes)
+      .values({
+        title: `Quiz: ${generated.title}`.slice(0, 160),
+        description: `Check your understanding of "${generated.title}".`,
+        category,
+        level: "BEGINNER",
+      })
+      .returning();
+    await tx.insert(quizQuestions).values(
+      generated.quiz.map((q, i) => ({
+        quizId: quiz!.id,
+        ordering: i,
+        type: "text",
+        question: q.question,
+        options: q.options,
+        correctIndex: q.correctIndex,
+      })),
+    );
+    await tx
+      .update(liveClasses)
+      .set({ materialId: material!.id, quizId: quiz!.id, updatedAt: new Date() })
+      .where(eq(liveClasses.id, cls.id));
+    return { materialId: material!.id, quizId: quiz!.id, title: generated.title, questions: generated.quiz.length };
+  });
+  return c.json(result, 201);
 });
 
 export default live;

@@ -839,6 +839,16 @@ export const openApiDocument = {
         },
       },
     },
+    "/api/materials/mine": {
+      get: {
+        tags: ["Materials"],
+        summary: "Materials created by the signed-in teacher (newest first)",
+        responses: {
+          "200": { description: "OK" },
+          "403": { description: "Not a teacher account (code teacher_only)" },
+        },
+      },
+    },
     "/api/materials": {
       get: {
         tags: ["Materials"],
@@ -872,6 +882,53 @@ export const openApiDocument = {
             },
           },
           "401": { $ref: "#/components/responses/Unauthorized" },
+        },
+      },
+      post: {
+        tags: ["Materials"],
+        summary: "Create a material (teacher only)",
+        description:
+          "Video: a YouTube link; the embed URL, thumbnail, transcript (when captions exist) and duration are filled in automatically. Article: Markdown content. The material is listed in Learning Materials for everyone.",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                oneOf: [
+                  {
+                    type: "object",
+                    required: ["type", "title", "category", "videoUrl"],
+                    properties: {
+                      type: { type: "string", enum: ["video"] },
+                      title: { type: "string", maxLength: 160 },
+                      description: { type: "string", maxLength: 500 },
+                      category: { type: "string", enum: ["K-12", "Vocational", "University", "Career", "Sign Language"] },
+                      language: { type: "string", enum: ["en", "id"], default: "en" },
+                      videoUrl: { type: "string", description: "YouTube link (watch, youtu.be or embed)" },
+                    },
+                  },
+                  {
+                    type: "object",
+                    required: ["type", "title", "category", "content"],
+                    properties: {
+                      type: { type: "string", enum: ["article"] },
+                      title: { type: "string", maxLength: 160 },
+                      description: { type: "string", maxLength: 500 },
+                      category: { type: "string", enum: ["K-12", "Vocational", "University", "Career", "Sign Language"] },
+                      language: { type: "string", enum: ["en", "id"], default: "en" },
+                      content: { type: "string", description: "Markdown, 20-50,000 characters" },
+                      articleUrl: { type: "string", format: "uri" },
+                    },
+                  },
+                ],
+              },
+            },
+          },
+        },
+        responses: {
+          "201": { description: "Created" },
+          "400": { description: "Invalid YouTube link (code invalid_youtube_url)" },
+          "403": { description: "Not a teacher account (code teacher_only)" },
         },
       },
     },
@@ -948,6 +1005,17 @@ export const openApiDocument = {
           },
           "404": { $ref: "#/components/responses/NotFound" },
           "401": { $ref: "#/components/responses/Unauthorized" },
+        },
+      },
+      delete: {
+        tags: ["Materials"],
+        summary: "Delete a material (its creator only)",
+        description: "Also deletes the quiz generated together with it from a Live Class.",
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
+        responses: {
+          "200": { description: "Deleted" },
+          "403": { description: "Not the creator" },
+          "404": { description: "Not found" },
         },
       },
     },
@@ -2076,7 +2144,22 @@ export const openApiDocument = {
             description: "OK",
             content: {
               "application/json": {
-                schema: { type: "array", items: { $ref: "#/components/schemas/LiveClass" } },
+                schema: {
+                  type: "array",
+                  items: {
+                    allOf: [
+                      { $ref: "#/components/schemas/LiveClass" },
+                      {
+                        type: "object",
+                        properties: {
+                          segmentCount: { type: "integer" },
+                          materialId: { type: "string", format: "uuid", nullable: true },
+                          quizId: { type: "string", format: "uuid", nullable: true },
+                        },
+                      },
+                    ],
+                  },
+                },
               },
             },
           },
@@ -2158,6 +2241,53 @@ export const openApiDocument = {
             },
           },
           "404": { description: "Class not found" },
+        },
+      },
+    },
+    "/api/live/classes/{code}/material": {
+      post: {
+        tags: ["Live Class"],
+        summary: "Turn a class transcript into a learning article + quiz (its teacher only)",
+        description:
+          "Gemini rewrites the transcript as an accessible Markdown article (2-6 sections) and a 5-question multiple-choice quiz. The article appears in Learning Materials and the quiz in Quizzes. Once per class.",
+        parameters: [{ name: "code", in: "path", required: true, schema: { type: "string" } }],
+        requestBody: {
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  category: {
+                    type: "string",
+                    enum: ["K-12", "Vocational", "University", "Career", "Sign Language"],
+                    default: "K-12",
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "201": {
+            description: "Created",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    materialId: { type: "string", format: "uuid" },
+                    quizId: { type: "string", format: "uuid" },
+                    title: { type: "string" },
+                    questions: { type: "integer" },
+                  },
+                },
+              },
+            },
+          },
+          "400": { description: "Transcript too short (code transcript_too_short)" },
+          "403": { description: "Not the teacher of this class" },
+          "409": { description: "Already turned into a material (code material_exists)" },
+          "503": { description: "AI not configured or generation failed" },
         },
       },
     },

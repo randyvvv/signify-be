@@ -92,11 +92,14 @@ export const materials = pgTable(
     articleUrl: text("article_url"),
     videoUrl: text("video_url"),
     transcript: jsonb("transcript").$type<string[]>(), // array paragraf
+    // Guru pembuat materi; null = materi bawaan Signify.
+    ownerId: uuid("owner_id").references(() => users.id, { onDelete: "cascade" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     index("materials_category_idx").on(t.category),
     index("materials_language_idx").on(t.language),
+    index("materials_owner_idx").on(t.ownerId, t.createdAt),
   ],
 );
 
@@ -491,6 +494,9 @@ export const liveClasses = pgTable(
     status: text("status").notNull().default("waiting"),
     startedAt: timestamp("started_at", { withTimezone: true }),
     endedAt: timestamp("ended_at", { withTimezone: true }),
+    // Materi & kuis yang dibuat dari transkrip kelas ini ("Turn into material").
+    materialId: uuid("material_id").references(() => materials.id, { onDelete: "set null" }),
+    quizId: uuid("quiz_id").references(() => quizzes.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

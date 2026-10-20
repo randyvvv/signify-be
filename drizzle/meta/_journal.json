@@ -64,6 +64,13 @@
       "when": 1792425519974,
       "tag": "0008_live_classes",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1792464009944,
+      "tag": "0009_teacher_materials",
+      "breakpoints": true
     }
   ]
 }
