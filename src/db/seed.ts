@@ -47,11 +47,21 @@ async function seed() {
   console.log("Seeding...");
 
   // ---- Shop items (sesuai signify-fe/src/components/shop/data.ts) ----
-  // Avatar: imageUrl menyimpan path file .vrm di public/ frontend.
+  // Avatar: imageUrl menyimpan path model .glb (Microsoft Rocketbox) di public/ frontend.
+  // Semua avatar gratis; Female Adult 01 jadi default.
   await db.insert(shopItems).values([
-    { name: "Classic", price: 0, category: "Avatar", imageUrl: "/avatar.vrm", isDefault: true },
-    { name: "Casual", price: 200, category: "Avatar", imageUrl: "/avatar-b.vrm" },
-    { name: "Sporty", price: 200, category: "Avatar", imageUrl: "/avatar-c.vrm" },
+    { name: "Female Adult 01", price: 0, category: "Avatar", imageUrl: "/avatars/female-adult-01.glb", isDefault: true },
+    ...[
+      ["Female Adult 02", "female-adult-02"],
+      ["Female Adult 14", "female-adult-14"],
+      ["Female Adult 15", "female-adult-15"],
+      ["Female Adult 17", "female-adult-17"],
+      ["Male Adult 01", "male-adult-01"],
+      ["Male Adult 02", "male-adult-02"],
+      ["Male Adult 06", "male-adult-06"],
+      ["Male Adult 10", "male-adult-10"],
+      ["Male Adult 16", "male-adult-16"],
+    ].map(([name, file]) => ({ name: name!, price: 0, category: "Avatar", imageUrl: `/avatars/${file}.glb` })),
     // Hair = recolor material rambut VRM (bukan ganti gaya).
     { name: "Black", price: 0, category: "Hair", color: "#1a1a1a", isDefault: true },
     { name: "Brown", price: 200, category: "Hair", color: "#6b4423" },

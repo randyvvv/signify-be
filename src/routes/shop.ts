@@ -11,6 +11,8 @@ import { requireAuth, type AuthVariables } from "../middleware/auth.js";
 const route = new Hono<{ Variables: AuthVariables }>();
 route.use("*", requireAuth);
 
+const isFreeItem = (item: { isDefault: boolean; price: number }) => item.isDefault || item.price === 0;
+
 // GET /shop/items?category=  -> item + status owned/equipped utk user
 route.get("/items", async (c) => {
   const userId = c.get("userId");
@@ -32,7 +34,8 @@ route.get("/items", async (c) => {
   return c.json(
     rows.map((r) => ({
       ...r.item,
-      isOwned: r.owned !== null || r.item.isDefault,
+      // Item gratis (mis. semua avatar) langsung dimiliki tanpa perlu dibeli.
+      isOwned: r.owned !== null || isFreeItem(r.item),
       equipped: r.equipped ?? false,
     })),
   );
@@ -45,7 +48,7 @@ route.post("/items/:id/purchase", async (c) => {
 
   const item = await db.query.shopItems.findFirst({ where: eq(shopItems.id, itemId) });
   if (!item) throw notFound("Item tidak ditemukan");
-  if (item.isDefault) throw conflict("Item default sudah dimiliki", "already_owned");
+  if (isFreeItem(item)) throw conflict("Item gratis sudah dimiliki", "already_owned");
 
   const balance = await db.transaction(async (tx) => {
     const already = await tx
@@ -102,7 +105,7 @@ route.put("/avatar", zValidator("json", equipSchema), async (c) => {
             "category_mismatch",
           );
         }
-        if (!ownedSet.has(itemId) && !item.isDefault) {
+        if (!ownedSet.has(itemId) && !isFreeItem(item)) {
           throw badRequest(`Item ${item.name} belum dimiliki`, "not_owned");
         }
       }
