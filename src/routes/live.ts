@@ -223,6 +223,8 @@ const AUTH_TIMEOUT_MS = 10_000;
 const clientMessageSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("auth"), token: z.string().min(1), code: z.string().min(1) }),
   z.object({ type: z.enum(["start", "stop", "end"]) }),
+  z.object({ type: z.literal("chat"), text: z.string().max(2000) }),
+  z.object({ type: z.literal("chat_delete"), id: z.string().uuid() }),
 ]);
 
 function sendEvent(ws: WSContext, event: LiveServerEvent) {
@@ -263,7 +265,10 @@ export function liveSocketEvents(): WSEvents {
       }
 
       if (parsed.type !== "auth") {
-        if (client && room) await room.command(client, parsed.type);
+        if (!client || !room) return;
+        if (parsed.type === "chat") await room.chat(client, parsed.text);
+        else if (parsed.type === "chat_delete") await room.deleteChat(client, parsed.id);
+        else await room.command(client, parsed.type);
         return;
       }
       if (client || authenticating) return;
@@ -286,7 +291,14 @@ export function liveSocketEvents(): WSEvents {
 
       if (authTimer) clearTimeout(authTimer);
       if (closed) return;
-      const joined: LiveClient = { ws, userId, role: row.cls.teacherId === userId ? "teacher" : "student" };
+      const user = await db.query.users.findFirst({ where: eq(users.id, userId), columns: { fullName: true } });
+      if (closed) return;
+      const joined: LiveClient = {
+        ws,
+        userId,
+        name: user?.fullName ?? null,
+        role: row.cls.teacherId === userId ? "teacher" : "student",
+      };
       room = await liveRooms.open(row.cls, row.teacherName);
       client = joined;
       await room.join(joined);

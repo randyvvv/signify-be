@@ -523,6 +523,23 @@ export const liveClassSegments = pgTable(
   (t) => [uniqueIndex("live_class_segments_class_seq_unique").on(t.classId, t.seq)],
 );
 
+// Chat Kelas Live: pertanyaan/komentar murid dan guru selama kelas.
+export const liveClassMessages = pgTable(
+  "live_class_messages",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    classId: uuid("class_id")
+      .notNull()
+      .references(() => liveClasses.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    text: text("text").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("live_class_messages_class_idx").on(t.classId, t.createdAt)],
+);
+
 /* ------------------------------------------------------------------ */
 /* Tipe bantu                                                          */
 /* ------------------------------------------------------------------ */

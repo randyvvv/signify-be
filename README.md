@@ -205,11 +205,18 @@ Broadcasting runs over the WebSocket `GET /api/live/ws`:
   and the last 100 transcript sentences.
 - The teacher sends `{ "type": "start" | "stop" | "end" }` and binary frames of
   16 kHz mono PCM16 audio (the frontend sends 100 ms chunks).
+- Live chat: anyone in the class sends `{ "type": "chat", "text": "..." }` (one line,
+  max 300 characters, at most one message per 0.8 s and 20 per minute). Messages
+  are saved in `live_class_messages` and broadcast as `chat`; `ready` includes the
+  last 100. `{ "type": "chat_delete", "id": "<uuid>" }` removes a message (the
+  teacher any message, students only their own) and broadcasts `chat_deleted`.
+  Chat closes when the class ends.
 - The server transcribes with Gemini Live (`LIVE_TRANSCRIBE_MODEL`, default
   `gemini-3.5-transcribe-live`), splits the speech into sentences and broadcasts
   `partial` (live caption), `segment` (final sentence, also saved to
   `live_class_segments`) and `pose_ready` once the sentence's sign animation is in
-  `pose_cache`, plus `status`, `viewers`, `error` and a `ping` every 25 s.
+  `pose_cache`, plus `chat`, `chat_deleted`, `status`, `viewers`, `error` and a
+  `ping` every 25 s.
 - Requires `AI_ENABLED=true` and `GEMINI_API_KEY`. Rooms live in memory, so the API
   must run as a single instance. A broadcast stops on its own after 2 hours.
 

@@ -3,6 +3,14 @@ import { asc, desc, eq, max } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { liveClasses, liveClassSegments, users, type LiveClass } from "../db/schema.js";
 import { env } from "../lib/env.js";
+import {
+  ChatRateLimiter,
+  deleteChatMessage,
+  listChatMessages,
+  normalizeChatText,
+  saveChatMessage,
+  type LiveChatMessageDto,
+} from "./live-chat.js";
 import { GeminiTranscriber } from "./live-transcriber.js";
 import { SPOKEN_LANGUAGE_LOCALES, TranscriptSegmenter, type SegmentUpdate } from "./live-transcript.js";
 import { translateTextToPose } from "./sign-translate.js";
@@ -47,6 +55,7 @@ export type LiveServerEvent =
       role: LiveRole;
       class: LiveClassDto;
       segments: LiveSegmentDto[];
+      messages: LiveChatMessageDto[];
       broadcasting: boolean;
       viewers: number;
     }
@@ -55,12 +64,15 @@ export type LiveServerEvent =
   | { type: "segment"; segment: LiveSegmentDto }
   | { type: "pose_ready"; seq: number; ok: boolean }
   | { type: "viewers"; count: number }
+  | { type: "chat"; message: LiveChatMessageDto }
+  | { type: "chat_deleted"; id: string }
   | { type: "error"; message: string; code: string }
   | { type: "ping" };
 
 export interface LiveClient {
   ws: WSContext;
   userId: string;
+  name: string | null;
   role: LiveRole;
 }
 
@@ -140,6 +152,7 @@ class LiveRoom {
   private pendingPartial = "";
   private sentPartial = "";
   private emptyTimer: NodeJS.Timeout | null = null;
+  private readonly chatLimiter = new ChatRateLimiter();
 
   constructor(
     private info: LiveClassDto,
@@ -188,15 +201,22 @@ class LiveRoom {
       }
     }
     this.clients.add(client);
-    const segments = await listSegments(this.classId, RECENT_SEGMENTS).catch((err) => {
-      console.error("[live-class] gagal memuat transkrip:", err);
-      return [];
-    });
+    const [segments, messages] = await Promise.all([
+      listSegments(this.classId, RECENT_SEGMENTS).catch((err) => {
+        console.error("[live-class] gagal memuat transkrip:", err);
+        return [];
+      }),
+      listChatMessages(this.classId, this.info.teacherId).catch((err) => {
+        console.error("[live-class] gagal memuat chat:", err);
+        return [];
+      }),
+    ]);
     send(client.ws, {
       type: "ready",
       role: client.role,
       class: this.info,
       segments,
+      messages,
       broadcasting: this.broadcasting,
       viewers: this.viewers,
     });
@@ -218,6 +238,45 @@ class LiveRoom {
     if (type === "start") await this.startBroadcast();
     else if (type === "stop") await this.stopBroadcast();
     else if (type === "end") await this.end();
+  }
+
+  /** Pesan chat dari guru atau murid: disimpan lalu disiarkan ke semua yang ada di kelas. */
+  async chat(client: LiveClient, raw: string): Promise<void> {
+    if (!this.clients.has(client)) return;
+    if (this.info.status === "ended") {
+      send(client.ws, { type: "error", message: "Kelas sudah berakhir, chat ditutup", code: "chat_closed" });
+      return;
+    }
+    const text = normalizeChatText(raw);
+    if (!text) return;
+    if (!this.chatLimiter.allow(client.userId)) {
+      send(client.ws, { type: "error", message: "Tunggu sebentar sebelum mengirim pesan lagi", code: "chat_too_fast" });
+      return;
+    }
+    try {
+      const message = await saveChatMessage({
+        classId: this.classId,
+        teacherId: this.info.teacherId,
+        userId: client.userId,
+        name: client.name,
+        text,
+      });
+      this.broadcast({ type: "chat", message });
+    } catch (err) {
+      console.error("[live-class] gagal menyimpan chat:", err);
+      send(client.ws, { type: "error", message: "Pesan gagal terkirim, coba lagi", code: "chat_failed" });
+    }
+  }
+
+  /** Guru boleh menghapus pesan siapa saja; murid hanya pesannya sendiri. */
+  async deleteChat(client: LiveClient, id: string): Promise<void> {
+    if (!this.clients.has(client)) return;
+    const authorId = client === this.teacher ? undefined : client.userId;
+    const deleted = await deleteChatMessage(this.classId, id, authorId).catch((err) => {
+      console.error("[live-class] gagal menghapus chat:", err);
+      return false;
+    });
+    if (deleted) this.broadcast({ type: "chat_deleted", id });
   }
 
   audio(client: LiveClient, data: ArrayBuffer): void {
