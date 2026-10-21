@@ -25,7 +25,7 @@ import {
   type LiveServerEvent,
 } from "../services/live-class.js";
 import { generateClassCode, normalizeClassCode } from "../services/live-transcript.js";
-import { createVideoToken, videoCredentials } from "../services/live-video.js";
+import { createVideoToken, muteStudents, videoCredentials } from "../services/live-video.js";
 import { SIGN_LANGUAGE_CODES } from "../services/sign-translate.js";
 
 const live = new Hono<{ Variables: AuthVariables }>();
@@ -132,14 +132,27 @@ live.post("/classes/:code/video-token", async (c) => {
   const { cls } = await classByCode(c.req.param("code"));
   if (cls.status === "ended") throw conflict("Kelas ini sudah berakhir", "class_ended");
   const user = await db.query.users.findFirst({ where: eq(users.id, userId) });
-  const canPublish = cls.teacherId === userId;
-  const token = await createVideoToken(credentials, {
-    classId: cls.id,
-    userId,
-    name: user?.fullName ?? null,
-    canPublish,
-  });
-  return c.json({ url: credentials.url, token, canPublish });
+  const token = await createVideoToken(credentials, { classId: cls.id, userId, name: user?.fullName ?? null });
+  return c.json({ url: credentials.url, token, canPublish: true, teacherId: cls.teacherId });
+});
+
+const muteSchema = z.object({ identity: z.string().uuid().optional() });
+
+// POST /api/live/classes/:code/mute -> guru mematikan mikrofon satu murid (identity) atau semua murid
+live.post("/classes/:code/mute", zValidator("json", muteSchema), async (c) => {
+  const credentials = videoCredentials();
+  if (!credentials) throw serviceUnavailable("Video Kelas Live belum dikonfigurasi", "video_unavailable");
+  const userId = c.get("userId");
+  const { cls } = await classByCode(c.req.param("code"));
+  if (cls.teacherId !== userId) throw forbidden("Hanya guru kelas ini yang bisa mematikan mikrofon murid");
+  const { identity } = c.req.valid("json");
+  try {
+    const muted = await muteStudents(credentials, { classId: cls.id, teacherId: cls.teacherId, identity });
+    return c.json({ muted });
+  } catch (err) {
+    console.error("[live-video] mute gagal:", err);
+    throw serviceUnavailable("Gagal mematikan mikrofon, coba lagi", "mute_failed");
+  }
 });
 
 const toMaterialSchema = z.object({ category: z.enum(MATERIAL_CATEGORIES).default("K-12") });

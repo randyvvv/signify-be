@@ -195,7 +195,8 @@ signing avatar. Turn on Teacher Mode with `PATCH /api/me { role: "teacher" }`.
 | GET | `/api/live/classes/:code` | class info + `broadcasting`, `viewers`, `isTeacher` |
 | GET | `/api/live/classes/:code/segments` | full transcript `[{ seq, text, offsetMs }]` |
 | POST | `/api/live/classes/:code/end` | end the class (its teacher only) |
-| POST | `/api/live/classes/:code/video-token` | LiveKit token: the class teacher publishes camera + mic, others watch (needs `LIVEKIT_*`) |
+| POST | `/api/live/classes/:code/video-token` | LiveKit token: everyone in the class may publish camera + mic (gallery like Zoom); returns `{ url, token, teacherId }` (needs `LIVEKIT_*`) |
+| POST | `/api/live/classes/:code/mute` | `{ identity? }` the class teacher mutes one student's mic (their user id) or all students; students can unmute again |
 | POST | `/api/live/classes/:code/material` | `{ category? }` → Gemini turns the transcript into an accessible article + 5-question quiz (once per class) |
 
 Broadcasting runs over the WebSocket `GET /api/live/ws`:

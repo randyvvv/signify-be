@@ -2409,7 +2409,7 @@ export const openApiDocument = {
         tags: ["Live Class"],
         summary: "LiveKit token for the class video",
         description:
-          "The class teacher may publish camera and microphone; everyone else joins as a viewer. Requires LIVEKIT_URL, LIVEKIT_API_KEY and LIVEKIT_API_SECRET.",
+          "Everyone in the class may publish camera and microphone (gallery like Zoom). LiveKit identities are user ids; teacherId tells clients which participant is the teacher. Requires LIVEKIT_URL, LIVEKIT_API_KEY and LIVEKIT_API_SECRET.",
         parameters: [{ name: "code", in: "path", required: true, schema: { type: "string" } }],
         responses: {
           "200": {
@@ -2422,6 +2422,7 @@ export const openApiDocument = {
                     url: { type: "string", description: "LiveKit WebSocket URL" },
                     token: { type: "string" },
                     canPublish: { type: "boolean" },
+                    teacherId: { type: "string", format: "uuid" },
                   },
                 },
               },
@@ -2429,6 +2430,34 @@ export const openApiDocument = {
           },
           "409": { description: "Class has ended (code class_ended)" },
           "503": { description: "Video not configured (code video_unavailable)" },
+        },
+      },
+    },
+    "/api/live/classes/{code}/mute": {
+      post: {
+        tags: ["Live Class"],
+        summary: "Mute students' microphones (the class teacher only)",
+        description:
+          "Mutes the microphone of one student (identity = their user id) or of every student when identity is omitted. Students can unmute themselves again.",
+        parameters: [{ name: "code", in: "path", required: true, schema: { type: "string" } }],
+        requestBody: {
+          content: {
+            "application/json": {
+              schema: { type: "object", properties: { identity: { type: "string", format: "uuid" } } },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "OK",
+            content: {
+              "application/json": {
+                schema: { type: "object", properties: { muted: { type: "integer", description: "Microphone tracks muted" } } },
+              },
+            },
+          },
+          "403": { description: "Not the class teacher" },
+          "503": { description: "Video not configured (video_unavailable) or LiveKit failed (mute_failed)" },
         },
       },
     },
