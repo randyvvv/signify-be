@@ -75,25 +75,14 @@ The `Dockerfile` builds the same app (migrations, then the server) and listens o
 `PORT` (8080 on Cloud Run). Live Class rooms live in memory, so the service must run
 as **one instance**; each WebSocket counts as a request, so raise the concurrency.
 
+`scripts/deploy-cloudrun.mjs` does the whole deploy from `.env`: it enables the APIs,
+stores the secrets in Secret Manager (via stdin, never printed), writes the other
+variables to `cloudrun.env.yaml` (git-ignored) and runs `gcloud run deploy --source .`.
+The step-by-step guide (Indonesian) is in [DEPLOY-CLOUDRUN.md](DEPLOY-CLOUDRUN.md).
+
 ```bash
-gcloud config set project <PROJECT_ID>
-gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com secretmanager.googleapis.com
-
-# Secrets (copy the values from Railway; run once per secret)
-printf '%s' '<value>' | gcloud secrets create signify-database-url --data-file=-
-#   … signify-jwt-secret, signify-gemini-api-key, signify-livekit-api-key, signify-livekit-api-secret
-gcloud projects add-iam-policy-binding <PROJECT_ID> \
-  --member="serviceAccount:<PROJECT_NUMBER>-compute@developer.gserviceaccount.com" \
-  --role="roles/secretmanager.secretAccessor"
-
-# Non-secret variables
-cp cloudrun.env.example.yaml cloudrun.env.yaml   # fill it in (git-ignored)
-
-gcloud run deploy signify-api --source . --region asia-southeast1 --allow-unauthenticated \
-  --min-instances 1 --max-instances 1 --concurrency 1000 --timeout 3600 \
-  --no-cpu-throttling --cpu 1 --memory 1Gi \
-  --env-vars-file cloudrun.env.yaml \
-  --set-secrets "DATABASE_URL=signify-database-url:latest,JWT_SECRET=signify-jwt-secret:latest,GEMINI_API_KEY=signify-gemini-api-key:latest,LIVEKIT_API_KEY=signify-livekit-api-key:latest,LIVEKIT_API_SECRET=signify-livekit-api-secret:latest"
+node scripts/deploy-cloudrun.mjs --project <PROJECT_ID> --dry-run   # show the plan
+node scripts/deploy-cloudrun.mjs --project <PROJECT_ID>             # deploy
 ```
 
 - `asia-southeast1` (Singapore) sits next to the Supabase pooler (`ap-southeast-1`).
